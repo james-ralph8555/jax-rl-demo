@@ -1,0 +1,11 @@
+[project]
+name = "cartpole-ppo-jax"
+version = "0.1.0"
+dependencies = [
+    "jax",
+    "flax",
+    "gymnasium",
+    "mlflow",
+    "numpy",
+    "matplotlib",
+]
