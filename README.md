@@ -45,8 +45,6 @@ just clean
 ### MLflow Dashboard
 ![MLflow Dashboard](public/mlflow_dashboard.jpg)
 
-The demo video shows a trained CartPole agent successfully balancing the pole using the PPO algorithm. The MLflow dashboard provides comprehensive experiment tracking with metrics visualization, hyperparameter logging, and model artifact management.
-
 ## Documentation
 
 - [Scripts usage](scripts/README.md) - Detailed training and evaluation options
