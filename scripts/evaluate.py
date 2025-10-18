@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Evaluation script for trained PPO models.
+Evaluation script for trained CartPole PPO models.
 
 This script loads a trained model from MLflow or a local checkpoint and evaluates
-its performance on the CartPole environment without training. It generates
-performance metrics and creates video recordings of the policy in action.
+its performance on the CartPole environment. It generates performance metrics
+and creates video recordings of the policy in action.
 """
 
 import argparse
@@ -14,21 +14,18 @@ import pickle
 import json
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import gymnasium as gym
-from gymnasium.wrappers import RecordVideo
-import imageio
 import imageio
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from src.agent.ppo import PPOAgent
-from src.agent.network import create_networks, sample_action
 from src.environment.cartpole import CartPoleWrapper
 from src.visualization.mlflow_logger import MLflowLogger
 
@@ -109,7 +106,7 @@ def load_model_from_mlflow(run_id: str, experiment_name: str = "cartpole-ppo", a
 
 def load_model_from_mlflow_uri(model_uri: str, experiment_name: str = "cartpole-ppo") -> Tuple[dict, PPOAgent]:
     """
-    Load a trained model from MLflow URI (backward compatibility).
+    Load a trained model from MLflow URI.
     
     Args:
         model_uri: MLflow model URI (e.g., "runs:/<run_id>/final_model")
@@ -322,16 +319,20 @@ def create_evaluation_report(metrics: Dict[str, Any], output_path: str) -> None:
     print(f"\nEvaluation report saved to: {output_path}")
 
 
-def main():
+def parse_args():
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Evaluate trained PPO model on CartPole')
-    parser.add_argument('--run-id', type=str,
-                       help='MLflow run ID (e.g., "ed91b0290af04f9b9fef07e6d72b44f6")')
-    parser.add_argument('--model-uri', type=str, 
-                       help='MLflow model URI (e.g., "runs:/<run_id>/final_model")')
-    parser.add_argument('--checkpoint', type=str,
-                       help='Path to local checkpoint file (.pkl)')
-    parser.add_argument('--artifact-path', type=str, default='final_model',
-                       help='MLflow artifact path within the run (default: final_model)')
+    
+    # Model source (exactly one required)
+    model_group = parser.add_mutually_exclusive_group(required=True)
+    model_group.add_argument('--run-id', type=str,
+                           help='MLflow run ID (e.g., "ed91b0290af04f9b9fef07e6d72b44f6")')
+    model_group.add_argument('--model-uri', type=str, 
+                           help='MLflow model URI (e.g., "runs:/<run_id>/final_model")')
+    model_group.add_argument('--checkpoint', type=str,
+                           help='Path to local checkpoint file (.pkl)')
+    
+    # Evaluation parameters
     parser.add_argument('--episodes', type=int, default=100,
                        help='Number of evaluation episodes (default: 100)')
     parser.add_argument('--max-steps', type=int, default=500,
@@ -340,18 +341,25 @@ def main():
                        help='Render environment during evaluation')
     parser.add_argument('--video-dir', type=str, default='evaluation_videos',
                        help='Directory to save videos (default: evaluation_videos)')
+    
+    # Output parameters
     parser.add_argument('--output', type=str, default='evaluation_report.json',
                        help='Output file for evaluation report (default: evaluation_report.json)')
     parser.add_argument('--experiment', type=str, default='cartpole-ppo',
                        help='MLflow experiment name (default: cartpole-ppo)')
+    parser.add_argument('--artifact-path', type=str, default='final_model',
+                       help='MLflow artifact path within the run (default: final_model)')
     
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    """Main evaluation function."""
+    args = parse_args()
     
-    # Validate arguments
-    model_sources = [args.run_id, args.model_uri, args.checkpoint]
-    if sum(1 for source in model_sources if source) != 1:
-        print("Error: Exactly one of --run-id, --model-uri, or --checkpoint must be specified")
-        sys.exit(1)
+    print("=" * 60)
+    print("CARTPOLE PPO MODEL EVALUATION")
+    print("=" * 60)
     
     # Load model
     print("Loading model...")

@@ -23,14 +23,14 @@ class PPOTrainer:
         max_steps_per_episode: int = 500,
         target_reward: float = 195.0,
         convergence_window: int = 100,
-        early_stopping_patience: int = 200,
+        early_stopping_patience: int = 10,
         eval_frequency: int = 50,
         eval_episodes: int = 10,
         save_frequency: int = 100,
         log_frequency: int = 10,
         enable_mlflow: bool = True,
         mlflow_experiment_name: str = "cartpole-ppo",
-        key: Optional[jax.random.PRNGKey] = None
+        key: Optional[jax.Array] = None
     ):
         """
         Initialize PPO trainer.
@@ -88,7 +88,7 @@ class PPOTrainer:
             self.mlflow_logger = MLflowLogger(self.mlflow_experiment_name)
             self.mlflow_logger.setup_autologging()
         
-    def collect_episode(self, key: jax.random.PRNGKey) -> Dict[str, jnp.ndarray]:
+    def collect_episode(self, key: jax.Array) -> Dict[str, jnp.ndarray]:
         """
         Collect a single episode of experience.
         
@@ -150,7 +150,7 @@ class PPOTrainer:
         
         return episode_data
     
-    def collect_batch(self, key: jax.random.PRNGKey, batch_size: int) -> Dict[str, jnp.ndarray]:
+    def collect_batch(self, key: jax.Array, batch_size: int) -> Dict[str, jnp.ndarray]:
         """
         Collect a batch of episodes.
         
@@ -214,11 +214,11 @@ class PPOTrainer:
             eval_lengths.append(episode_length)
         
         return {
-            'avg_reward': np.mean(eval_rewards),
-            'std_reward': np.std(eval_rewards),
-            'max_reward': np.max(eval_rewards),
-            'min_reward': np.min(eval_rewards),
-            'avg_length': np.mean(eval_lengths)
+            'avg_reward': float(np.mean(eval_rewards)),
+            'std_reward': float(np.std(eval_rewards)),
+            'max_reward': float(np.max(eval_rewards)),
+            'min_reward': float(np.min(eval_rewards)),
+            'avg_length': float(np.mean(eval_lengths))
         }
     
     def check_convergence(self) -> bool:
@@ -245,7 +245,7 @@ class PPOTrainer:
         
         return False
     
-    def train_step(self, key: jax.random.PRNGKey) -> Dict[str, Any]:
+    def train_step(self, key: jax.Array) -> Dict[str, Any]:
         """
         Perform one training step (collect batch and update).
         
@@ -266,30 +266,9 @@ class PPOTrainer:
         
         # Handle both JAX arrays and Python scalars
         if hasattr(episode_reward, 'item'):
-            episode_reward = episode_reward.item()
+            episode_reward = float(episode_reward.item())
         if hasattr(episode_length, 'item'):
-            episode_length = episode_length.item()
-            
-        episode_rewards = [episode_reward]
-        episode_lengths = [episode_length]
-        
-        # Update agent state
-        self.agent.network_params = new_network_params
-        self.agent.optimizer_state = new_optimizer_state
-        
-        # Update episode and step counts
-        self.episode_count += 1
-        self.step_count += episode_length
-        
-        # Extract episode statistics from update_metrics
-        episode_reward = update_metrics.get('episode_reward', 0)
-        episode_length = update_metrics.get('episode_length', 0)
-        
-        # Handle both JAX arrays and Python scalars
-        if hasattr(episode_reward, 'item'):
-            episode_reward = episode_reward.item()
-        if hasattr(episode_length, 'item'):
-            episode_length = episode_length.item()
+            episode_length = int(episode_length.item())
             
         episode_rewards = [episode_reward]
         episode_lengths = [episode_length]
@@ -310,8 +289,8 @@ class PPOTrainer:
         step_metrics = {
             'episode_rewards': episode_rewards,
             'episode_lengths': episode_lengths,
-            'avg_reward': np.mean(episode_rewards),
-            'avg_length': np.mean(episode_lengths),
+            'avg_reward': float(np.mean(episode_rewards)),
+            'avg_length': float(np.mean(episode_lengths)),
             'total_steps': episode_lengths[0],
             **update_metrics
         }
@@ -461,6 +440,36 @@ class PPOTrainer:
                 'converged': self.best_avg_reward >= self.target_reward,
             }
             self.mlflow_logger.log_metrics(final_metrics, step=self.episode_count)
+            
+            # Log enhanced visualizations
+            self.mlflow_logger.log_advanced_learning_curves(
+                self.episode_rewards, 
+                dict(self.losses), 
+                self.eval_rewards
+            )
+            self.mlflow_logger.log_training_stability(self.episode_rewards)
+            
+            # Create comprehensive analysis
+            training_data = {
+                'episode_rewards': self.episode_rewards,
+                'episode_lengths': self.episode_lengths,
+                'losses': dict(self.losses),
+                'eval_rewards': self.eval_rewards,
+                'hyperparams': {
+                    'learning_rate': self.agent.learning_rate,
+                    'clip_epsilon': self.agent.clip_epsilon,
+                    'gamma': self.agent.gamma,
+                    'gae_lambda': self.agent.gae_lambda,
+                    'entropy_coef': self.agent.entropy_coef,
+                    'value_coef': self.agent.value_coef,
+                    'batch_size': self.agent.batch_size,
+                    'epochs_per_update': self.agent.epochs_per_update,
+                }
+            }
+            self.mlflow_logger.log_comprehensive_analysis(training_data)
+            
+            # Create performance report
+            performance_report = self.mlflow_logger.create_performance_report(results)
             
             # Log training curves and model
             self.mlflow_logger.log_training_curves(self.episode_rewards, self.losses)

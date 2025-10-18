@@ -23,6 +23,7 @@
           mlflow
           moviepy
           imageio
+          seaborn
         ]);
       in {
         devShells.default = pkgs.mkShell {
