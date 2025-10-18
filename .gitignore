@@ -139,4 +139,7 @@ result-*
 .mlflow_server.pid
 mlflow.db
 data/
-evaluationn_report.json
+
+evaluation_report.json
+AGENTS.md
+

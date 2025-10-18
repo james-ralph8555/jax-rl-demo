@@ -144,44 +144,29 @@ _, advantages = jax.lax.scan(
 ## Training Algorithm
 
 ```mermaid
-algorithm
-%% Training Algorithm Pseudocode
-class PPOTrainer:
-    function train():
-        Initialize agent, environment, optimizer
-        Initialize MLflow logger
-        
-        for episode in range(max_episodes):
-            # 1. Collect Experience
-            episode_data = collect_episode()
-            
-            # 2. Compute Advantages and Returns
-            advantages, returns = compute_gae(episode_data)
-            
-            # 3. Update Policy (Multiple Epochs)
-            for epoch in range(epochs_per_update):
-                minibatches = create_minibatches(episode_data)
-                for minibatch in minibatches:
-                    # Compute PPO loss
-                    loss = compute_ppo_loss(minibatch)
-                    
-                    # Compute and apply gradients
-                    grads = jax.grad(loss)(network_params)
-                    grads = clip_gradients(grads, max_grad_norm)
-                    network_params = optimizer.apply(grads)
-            
-            # 4. Evaluate Policy
-            if episode % eval_frequency == 0:
-                eval_metrics = evaluate_policy()
-                log_evaluation_metrics(eval_metrics)
-            
-            # 5. Check Convergence
-            if check_convergence():
-                break
-        
-        # 6. Final Evaluation and Model Saving
-        final_results = final_evaluation()
-        save_model_and_results(final_results)
+flowchart TD
+    Start([Start Training]) --> Init[Initialize agent, environment, optimizer]
+    Init --> Logger[Initialize MLflow logger]
+    Logger --> Loop{Episode < max_episodes?}
+    Loop -->|Yes| Collect[1. Collect Experience]
+    Collect --> Compute[2. Compute Advantages and Returns]
+    Compute --> UpdateLoop{Epoch < epochs_per_update?}
+    UpdateLoop -->|Yes| Minibatch[Create minibatches]
+    Minibatch --> Loss[Compute PPO loss]
+    Loss --> Gradients[Compute and apply gradients]
+    Gradients --> UpdateLoop
+    UpdateLoop -->|No| EvalCheck{Episode % eval_frequency == 0?}
+    EvalCheck -->|Yes| Evaluate[4. Evaluate Policy]
+    Evaluate --> LogMetrics[Log evaluation metrics]
+    LogMetrics --> Convergence[5. Check Convergence]
+    EvalCheck -->|No| Convergence
+    Convergence --> Converged{Converged?}
+    Converged -->|Yes| Break[Break loop]
+    Converged -->|No| Loop
+    Loop -->|No| FinalEval[6. Final Evaluation]
+    FinalEval --> Save[Save model and results]
+    Save --> End([End Training])
+    Break --> FinalEval
 ```
 
 ## Key Features
