@@ -8,7 +8,7 @@ A reinforcement learning implementation of Proximal Policy Optimization (PPO) fo
 # Enter development environment
 nix develop
 
-# Start MLflow tracking server
+# Start MLflow tracking server (runs on http://localhost:5000)
 just start-mlflow
 
 # Train a model
@@ -18,17 +18,13 @@ python scripts/train.py --episodes 1000
 python scripts/evaluate.py --checkpoint models/best_model.pkl
 ```
 
+> **MLflow Server**: The tracking server provides a web interface at `http://localhost:5000` for monitoring training progress, comparing experiments, and visualizing metrics. Use `just stop-mlflow` to shut it down when done.
+
 ## Development
 
 ```bash
 # Run tests
 just test
-
-# Check MLflow server status
-just status
-
-# Stop MLflow server
-just stop-mlflow
 
 # Clean up artifacts
 just clean
@@ -40,6 +36,16 @@ just clean
 - `scripts/` - Command-line tools for training and evaluation
 - `tests/` - Unit and integration tests
 - `data/` - MLflow artifacts and logs
+
+## Demo & Visualization
+
+### CartPole Demo Video
+![CartPole Demo](public/cartpole_demo.mp4)
+
+### MLflow Dashboard
+![MLflow Dashboard](public/mlflow_dashboard.jpg)
+
+The demo video shows a trained CartPole agent successfully balancing the pole using the PPO algorithm. The MLflow dashboard provides comprehensive experiment tracking with metrics visualization, hyperparameter logging, and model artifact management.
 
 ## Documentation
 

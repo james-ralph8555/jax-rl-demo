@@ -90,7 +90,7 @@ graph LR
     
     subgraph "Critic Head"
         F --> J[Dense 1]
-        J --> K[State Value V(s_t)]
+        J --> K["State Value V(s_t)"]
     end
     
     I --> L[Sampled Action a_t]
