@@ -44,7 +44,6 @@ just clean
 ## Documentation
 
 - [Scripts usage](scripts/README.md) - Detailed training and evaluation options
-- [Agent documentation](AGENTS.md) - PPO implementation details
 - [Agent module](src/agent/README.md) - PPO agent implementation with JAX and Flax
 - [Environment module](src/environment/README.md) - CartPole environment wrapper and utilities
 - [Training module](src/training/README.md) - Training infrastructure and PPO trainer
