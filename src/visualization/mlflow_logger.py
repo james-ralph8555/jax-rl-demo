@@ -22,7 +22,7 @@ class MLflowLogger:
         """
         self.experiment_name = experiment_name
         self.tracking_uri = tracking_uri or os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
-        self.backend_store_uri = os.getenv("MLFLOW_BACKEND_STORE_URI", "sqlite:///mlflow.db")
+        self.backend_store_uri = os.getenv("MLFLOW_BACKEND_STORE_URI", "sqlite:///data/mlflow.db")
         self.run_id = None
         
         # Set tracking URI and backend store
@@ -34,7 +34,7 @@ class MLflowLogger:
             if self.experiment is None:
                 self.experiment_id = mlflow.create_experiment(
                     name=experiment_name,
-                    artifact_location="./mlartifacts"
+                    artifact_location="./data/ml_artifacts"
                 )
             else:
                 self.experiment_id = self.experiment.experiment_id

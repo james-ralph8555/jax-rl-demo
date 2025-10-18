@@ -21,4 +21,4 @@ pip install mlflow
 
 echo "✅ MLflow virtual environment setup complete!"
 echo "To activate: source .venv/bin/activate"
-echo "To start server: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlartifacts --serve-artifacts"
+echo "To start server: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///data/mlflow.db --default-artifact-root ./data/ml_artifacts --serve-artifacts"

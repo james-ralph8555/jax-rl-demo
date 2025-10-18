@@ -15,11 +15,14 @@
           jaxlib
           flax
           gymnasium
+          pygame
           numpy
           matplotlib
           pytest
           sqlalchemy
           mlflow
+          moviepy
+          imageio
         ]);
       in {
         devShells.default = pkgs.mkShell {
