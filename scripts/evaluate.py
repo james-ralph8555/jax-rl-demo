@@ -168,7 +168,7 @@ def evaluate_agent(
         num_episodes: Number of evaluation episodes
         max_steps_per_episode: Maximum steps per episode
         render: Whether to render the environment
-        video_dir: Directory to save videos (required)
+        video_dir: Directory to save videos and GIFs (required)
         
     Returns:
         Dictionary containing evaluation metrics
@@ -177,6 +177,7 @@ def evaluate_agent(
     episode_lengths = []
     episode_data = []
     video_paths = []
+    gif_paths = []
     
     # Create video directory if not specified
     if video_dir is None:
@@ -244,10 +245,15 @@ def evaluate_agent(
         imageio.mimsave(video_path, episode_frames, fps=60)
         video_paths.append(video_path)
         
+        # Save GIF for this episode at 30fps
+        gif_path = os.path.join(video_dir, f"episode_{episode + 1:03d}.gif")
+        imageio.mimsave(gif_path, episode_frames, fps=30)
+        gif_paths.append(gif_path)
+        
         print(f"Episode {episode + 1:3d}/{num_episodes} | "
               f"Reward: {episode_reward:6.1f} | "
               f"Length: {episode_length:3d} | "
-              f"Video: {video_path}")
+              f"Video: {video_path} | GIF: {gif_path}")
     
     # Close video environment
     frame_env.close()
@@ -272,6 +278,7 @@ def evaluate_agent(
         'episode_lengths': episode_lengths.tolist(),
         'episode_data': episode_data,
         'video_paths': video_paths,
+        'gif_paths': gif_paths,
         'video_dir': video_dir
     }
     
@@ -343,7 +350,7 @@ def parse_args():
     parser.add_argument('--render', action='store_true',
                        help='Render environment during evaluation')
     parser.add_argument('--video-dir', type=str, default='evaluation_videos',
-                       help='Directory to save videos (default: evaluation_videos)')
+                       help='Directory to save videos and GIFs (default: evaluation_videos)')
     
     # Output parameters
     parser.add_argument('--output', type=str, default='evaluation_report.json',
@@ -414,6 +421,9 @@ def main():
     print(f"\nVideos saved to: {metrics['video_dir']}")
     for video_path in metrics['video_paths']:
         print(f"  - {video_path}")
+    print(f"\nGIFs saved to: {metrics['video_dir']}")
+    for gif_path in metrics['gif_paths']:
+        print(f"  - {gif_path}")
     
     # Create evaluation report
     create_evaluation_report(metrics, args.output)
