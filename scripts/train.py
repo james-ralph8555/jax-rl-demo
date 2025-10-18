@@ -74,9 +74,9 @@ def parse_args():
     parser.add_argument("--disable-mlflow", action="store_true",
                         help="Disable MLflow tracking")
     
-    # Video recording parameters
+    # GIF recording parameters
     parser.add_argument("--video-record-freq", type=int, default=200,
-                        help="Frequency of video recording during evaluation (default: 200)")
+                        help="Frequency of GIF recording during evaluation (default: 200)")
     
     # Random seed
     parser.add_argument("--seed", type=int, default=42,
@@ -98,9 +98,18 @@ def main():
     
     # Create environment
     print("Creating CartPole environment...")
+    
+    # Determine GIF directory
+    video_dir = None
+    if not args.disable_mlflow and args.video_record_freq:
+        # Create a local directory for GIFs that will be logged to MLflow
+        video_dir = "data/evaluation_gifs"
+        os.makedirs(video_dir, exist_ok=True)
+    
     env = CartPoleWrapper(
         max_episode_steps=args.max_steps,
-        video_record_freq=args.video_record_freq if not args.disable_mlflow else None
+        video_record_freq=args.video_record_freq if not args.disable_mlflow else None,
+        video_dir=video_dir
     )
     
     # Create agent

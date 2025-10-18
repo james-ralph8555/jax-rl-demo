@@ -3,10 +3,10 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import imageio
 from gymnasium import make
-from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+from gymnasium.wrappers import RecordEpisodeStatistics
 from typing import Tuple, Dict, Any, Optional, List
-import tempfile
 import os
 
 
@@ -26,31 +26,21 @@ class CartPoleWrapper:
             render_mode: Rendering mode ('human', 'rgb_array', or None)
             max_episode_steps: Maximum steps per episode
             normalize_observations: Whether to normalize observations
-            video_record_freq: Frequency of video recording (None to disable)
-            video_dir: Directory to save videos (auto-generated if None)
+            video_record_freq: Frequency of GIF recording (None to disable)
+            video_dir: Directory to save GIFs (required if video_record_freq is set)
         """
         self.video_record_freq = video_record_freq
-        self.video_dir = video_dir or tempfile.mkdtemp(prefix="cartpole_videos_")
+        if video_record_freq is not None and video_dir is None:
+            raise ValueError("video_dir must be provided when video_record_freq is set")
+        self.video_dir = video_dir
         
-        # Set render mode to rgb_array if video recording is requested
+        # Set render mode to rgb_array if GIF recording is requested
         if video_record_freq is not None and render_mode is None:
             render_mode = 'rgb_array'
         
         # Create base environment
         self.env = make('CartPole-v1', render_mode=render_mode, max_episode_steps=max_episode_steps)
         self.env = RecordEpisodeStatistics(self.env)
-        
-        # Add video recording if requested
-        if self.video_record_freq is not None:
-            def episode_trigger(episode_id):
-                return episode_id % self.video_record_freq == 0
-            
-            self.env = RecordVideo(
-                self.env, 
-                video_folder=self.video_dir,
-                episode_trigger=episode_trigger,
-                name_prefix="cartpole"
-            )
         
         self.normalize_observations = normalize_observations
         
@@ -170,58 +160,58 @@ class CartPoleWrapper:
         """Close the environment."""
         self.env.close()
     
-    def get_recorded_videos(self) -> List[str]:
+    def get_recorded_gifs(self) -> List[str]:
         """
-        Get list of recorded video files.
+        Get list of recorded GIF files.
         
         Returns:
-            List of video file paths
+            List of GIF file paths
         """
-        videos = []
-        if self.video_record_freq is not None and os.path.exists(self.video_dir):
+        gifs = []
+        if self.video_record_freq is not None and self.video_dir and os.path.exists(self.video_dir):
             for file in os.listdir(self.video_dir):
-                if file.endswith('.mp4'):
-                    videos.append(os.path.join(self.video_dir, file))
-        return sorted(videos)
+                if file.endswith('.gif'):
+                    gifs.append(os.path.join(self.video_dir, file))
+        return sorted(gifs)
     
-    def record_episode_video(self, episode_id: int, max_steps: int = 500) -> Optional[str]:
+    def record_episode_gif(self, episode_id: int, max_steps: int = 500) -> Optional[str]:
         """
-        Record a single episode video.
+        Record a single episode as GIF.
         
         Args:
             episode_id: Episode identifier
             max_steps: Maximum steps to record
             
         Returns:
-            Path to recorded video file or None if failed
+            Path to recorded GIF file or None if failed
         """
-        try:
-            # Create a temporary environment for video recording
-            temp_env = make('CartPole-v1', render_mode='rgb_array', max_episode_steps=max_steps)
-            temp_env = RecordVideo(
-                temp_env,
-                video_folder=self.video_dir,
-                episode_trigger=lambda x: True,  # Record this episode
-                name_prefix=f"eval_episode_{episode_id}"
-            )
+        if not self.video_dir:
+            return None
             
-            # Run one episode
+        try:
+            # Create a temporary environment for GIF recording
+            temp_env = make('CartPole-v1', render_mode='rgb_array', max_episode_steps=max_steps)
+            
+            frames = []
             obs, info = temp_env.reset()
+            frames.append(temp_env.render())
+            
             for step in range(max_steps):
                 action = temp_env.action_space.sample()  # Random action for demo
                 obs, reward, terminated, truncated, info = temp_env.step(action)
+                frames.append(temp_env.render())
                 if terminated or truncated:
                     break
             
             temp_env.close()
             
-            # Find the recorded video
-            for file in os.listdir(self.video_dir):
-                if f"eval_episode_{episode_id}" in file and file.endswith('.mp4'):
-                    return os.path.join(self.video_dir, file)
+            # Save as GIF
+            gif_path = os.path.join(self.video_dir, f"eval_episode_{episode_id}.gif")
+            imageio.mimsave(gif_path, frames, fps=30)
+            return gif_path
             
         except Exception as e:
-            print(f"Warning: Could not record episode video: {e}")
+            print(f"Warning: Could not record episode GIF: {e}")
         
         return None
     

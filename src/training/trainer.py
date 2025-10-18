@@ -30,7 +30,7 @@ class PPOTrainer:
         log_frequency: int = 10,
         enable_mlflow: bool = True,
         mlflow_experiment_name: str = "cartpole-ppo",
-        video_record_frequency: int = 200,  # Record video every N episodes
+        video_record_frequency: int = 200,  # Record GIF every N episodes
         key: Optional[jax.Array] = None
     ):
         """
@@ -183,30 +183,30 @@ class PPOTrainer:
         
         return batch
     
-    def evaluate(self, num_episodes: int, record_video: bool = False, episode_id: Optional[int] = None) -> Dict[str, Any]:
+    def evaluate(self, num_episodes: int, record_gif: bool = False, episode_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Evaluate the current policy.
         
         Args:
             num_episodes: Number of evaluation episodes
-            record_video: Whether to record a video of the first episode
-            episode_id: Episode ID for video naming
+            record_gif: Whether to record a GIF of the first episode
+            episode_id: Episode ID for GIF naming
             
         Returns:
             Evaluation metrics dictionary
         """
         eval_rewards = []
         eval_lengths = []
-        video_path = None
+        gif_path = None
         
         for ep in range(num_episodes):
             obs, info = self.env.reset()
             episode_reward = 0
             episode_length = 0
             
-            # Record video for first episode if requested
-            if record_video and ep == 0 and hasattr(self.env, 'record_episode_video'):
-                video_path = self.env.record_episode_video(episode_id or 0, self.max_steps_per_episode)
+            # Record GIF for first episode if requested
+            if record_gif and ep == 0 and hasattr(self.env, 'record_episode_gif'):
+                gif_path = self.env.record_episode_gif(episode_id or 0, self.max_steps_per_episode)
             
             for step in range(self.max_steps_per_episode):
                 # Select action deterministically via argmax over policy logits
@@ -229,7 +229,7 @@ class PPOTrainer:
             'max_reward': float(np.max(eval_rewards)),
             'min_reward': float(np.min(eval_rewards)),
             'avg_length': float(np.mean(eval_lengths)),
-            'video_path': video_path
+            'gif_path': gif_path
         }
         
         return result
@@ -402,9 +402,9 @@ class PPOTrainer:
             
             # Evaluation
             if episode % self.eval_frequency == 0 and episode > 0:
-                # Record video for evaluation episodes
-                record_video = (episode % self.video_record_frequency == 0)
-                eval_metrics = self.evaluate(self.eval_episodes, record_video=record_video, episode_id=episode)
+                # Record GIF for evaluation episodes
+                record_gif = (episode % self.video_record_frequency == 0)
+                eval_metrics = self.evaluate(self.eval_episodes, record_gif=record_gif, episode_id=episode)
                 self.eval_rewards.append(eval_metrics['avg_reward'])
                 
                 print(f"Evaluation | "
@@ -416,7 +416,7 @@ class PPOTrainer:
                     self.mlflow_logger.log_evaluation_metrics(
                         eval_metrics, 
                         episode, 
-                        video_path=eval_metrics.get('video_path')
+                        video_path=eval_metrics.get('gif_path')
                     )
                     
                     # Log incremental analysis

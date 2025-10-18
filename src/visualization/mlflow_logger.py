@@ -379,14 +379,14 @@ class MLflowLogger:
                               model_id: Optional[str] = None, dataset: Optional[Any] = None,
                               video_path: Optional[str] = None) -> None:
         """
-        Log evaluation metrics with optional model linking and video
+        Log evaluation metrics with optional model linking and GIF
         
         Args:
             eval_metrics: Evaluation metrics dictionary
             step: Current step/episode number
             model_id: Optional model ID to link metrics to
             dataset: Optional dataset to link metrics to
-            video_path: Optional path to evaluation video
+            video_path: Optional path to evaluation GIF (kept for compatibility)
         """
         # Filter out None values from metrics to avoid conversion errors
         filtered_metrics = {key: value for key, value in eval_metrics.items() if value is not None}
@@ -395,35 +395,47 @@ class MLflowLogger:
         prefixed_metrics = {f"eval_{key}": value for key, value in filtered_metrics.items()}
         self.log_metrics(prefixed_metrics, step=step, model_id=model_id, dataset=dataset)
         
-        # Log video if provided
+        # Log GIF if provided
         if video_path and os.path.exists(video_path):
             try:
-                mlflow.log_artifact(video_path, f"evaluation_videos/step_{step}")
+                mlflow.log_artifact(video_path, f"evaluation_gifs/step_{step}")
             except Exception as e:
-                print(f"Warning: Could not log evaluation video: {e}")
+                print(f"Warning: Could not log evaluation GIF: {e}")
+    
+    def log_evaluation_gif(self, gif_path: str, step: int, episode_id: Optional[int] = None) -> None:
+        """
+        Log an evaluation GIF to MLflow
+        
+        Args:
+            gif_path: Path to the GIF file
+            step: Current training step
+            episode_id: Optional episode identifier
+        """
+        if not os.path.exists(gif_path):
+            print(f"Warning: GIF file not found: {gif_path}")
+            return
+        
+        try:
+            artifact_path = f"evaluation_gifs/step_{step}"
+            if episode_id is not None:
+                artifact_path += f"_episode_{episode_id}"
+            
+            mlflow.log_artifact(gif_path, artifact_path)
+            print(f"Logged evaluation GIF: {gif_path}")
+        except Exception as e:
+            print(f"Warning: Could not log evaluation GIF: {e}")
     
     def log_evaluation_video(self, video_path: str, step: int, episode_id: Optional[int] = None) -> None:
         """
-        Log an evaluation video to MLflow
+        Log an evaluation video to MLflow (deprecated, use log_evaluation_gif instead)
         
         Args:
             video_path: Path to the video file
             step: Current training step
             episode_id: Optional episode identifier
         """
-        if not os.path.exists(video_path):
-            print(f"Warning: Video file not found: {video_path}")
-            return
-        
-        try:
-            artifact_path = f"evaluation_videos/step_{step}"
-            if episode_id is not None:
-                artifact_path += f"_episode_{episode_id}"
-            
-            mlflow.log_artifact(video_path, artifact_path)
-            print(f"Logged evaluation video: {video_path}")
-        except Exception as e:
-            print(f"Warning: Could not log evaluation video: {e}")
+        # For backward compatibility, treat as GIF
+        self.log_evaluation_gif(video_path, step, episode_id)
     
     def log_incremental_analysis(self, episode_rewards: List[float], 
                                 losses: Dict[str, List[float]], 

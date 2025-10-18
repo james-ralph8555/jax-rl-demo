@@ -223,7 +223,7 @@ Comprehensive experiment tracking includes:
 | `max_episodes` | 1000 | Maximum training episodes |
 | `max_steps_per_episode` | 500 | Maximum steps per episode |
 | `target_reward` | 195.0 | Target average reward for convergence |
-| `convergence_window` | 100 | Window size for convergence checking |
+| `convergence_window` | 100 | Window size for convergence checking (default 20 in train.py script) |
 | `early_stopping_patience` | 10 | Episodes to wait after convergence |
 | `eval_frequency` | 50 | Frequency of evaluation episodes |
 | `eval_episodes` | 10 | Number of episodes for evaluation |
