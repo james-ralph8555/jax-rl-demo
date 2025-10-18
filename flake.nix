@@ -14,16 +14,24 @@
           jax
           jaxlib
           flax
+          numpy
+          pytest
+          mlflow
+          # mlflow db
+          sqlalchemy
+          #gym classic control
           gymnasium
           pygame
-          numpy
-          matplotlib
-          pytest
-          sqlalchemy
-          mlflow
+          # mujoco gym env
+          mujoco
+          #evaluation/visualization
           moviepy
+          matplotlib
           imageio
           seaborn
+          plotly
+          # mlflow system metrics
+          psutil
         ]);
       in {
         devShells.default = pkgs.mkShell {

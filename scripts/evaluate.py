@@ -176,7 +176,7 @@ def evaluate_agent(
     episode_rewards = []
     episode_lengths = []
     episode_data = []
-    all_frames = []
+    video_paths = []
     
     # Create video directory if not specified
     if video_dir is None:
@@ -198,11 +198,12 @@ def evaluate_agent(
         episode_frames = []
         
         for step in range(max_steps_per_episode):
-            # Select action (deterministic for evaluation)
-            action_key = jax.random.PRNGKey(0)  # Fixed seed for deterministic behavior
-            action, log_prob, value_info = agent.select_action(
-                agent.network_params, obs[None, :], action_key
-            )
+            # Greedy action selection for evaluation (deterministic)
+            policy_logits, value = agent.network.apply(agent.network_params, obs[None, :])
+            action = jnp.argmax(policy_logits, axis=-1)
+            log_probs = jax.nn.log_softmax(policy_logits)
+            # Extract log-prob of chosen action for logging
+            lp = log_probs[0, int(action.item())]
             
             # Take environment step
             next_obs, reward, terminated, truncated, info = frame_env.step(int(action.item()))
@@ -220,8 +221,8 @@ def evaluate_agent(
                 'reward': reward,
                 'next_observation': next_obs.tolist(),
                 'done': done,
-                'log_prob': float(log_prob.item()),
-                'value': float(value_info['value'].item())
+                'log_prob': float(lp.item()),
+                'value': float(value.item())
             })
             
             episode_reward += float(reward)
@@ -237,18 +238,19 @@ def evaluate_agent(
         episode_rewards.append(episode_reward)
         episode_lengths.append(episode_length)
         episode_data.append(step_data)
-        all_frames.extend(episode_frames)
+        
+        # Save video for this episode at 60fps
+        video_path = os.path.join(video_dir, f"episode_{episode + 1:03d}.mp4")
+        imageio.mimsave(video_path, episode_frames, fps=60)
+        video_paths.append(video_path)
         
         print(f"Episode {episode + 1:3d}/{num_episodes} | "
               f"Reward: {episode_reward:6.1f} | "
-              f"Length: {episode_length:3d}")
+              f"Length: {episode_length:3d} | "
+              f"Video: {video_path}")
     
     # Close video environment
     frame_env.close()
-    
-    # Save video with 15fps
-    video_path = os.path.join(video_dir, "evaluation_video.mp4")
-    imageio.mimsave(video_path, all_frames, fps=15)
     
     # Compute statistics
     episode_rewards = np.array(episode_rewards)
@@ -269,7 +271,8 @@ def evaluate_agent(
         'episode_rewards': episode_rewards.tolist(),
         'episode_lengths': episode_lengths.tolist(),
         'episode_data': episode_data,
-        'video_path': video_path
+        'video_paths': video_paths,
+        'video_dir': video_dir
     }
     
     return metrics
@@ -408,7 +411,9 @@ def main():
     print(f"Mean episode length: {metrics['mean_length']:.1f} ± {metrics['std_length']:.1f}")
     print(f"Success rate (reward ≥ 195): {metrics['success_rate']:.2%}")
     print(f"Converged: {metrics['mean_reward'] >= 195}")
-    print(f"\nVideo saved to: {metrics['video_path']}")
+    print(f"\nVideos saved to: {metrics['video_dir']}")
+    for video_path in metrics['video_paths']:
+        print(f"  - {video_path}")
     
     # Create evaluation report
     create_evaluation_report(metrics, args.output)

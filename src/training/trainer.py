@@ -30,6 +30,7 @@ class PPOTrainer:
         log_frequency: int = 10,
         enable_mlflow: bool = True,
         mlflow_experiment_name: str = "cartpole-ppo",
+        video_record_frequency: int = 200,  # Record video every N episodes
         key: Optional[jax.Array] = None
     ):
         """
@@ -64,6 +65,7 @@ class PPOTrainer:
         self.log_frequency = log_frequency
         self.enable_mlflow = enable_mlflow
         self.mlflow_experiment_name = mlflow_experiment_name
+        self.video_record_frequency = video_record_frequency
         
         if key is None:
             key = jax.random.PRNGKey(42)
@@ -181,27 +183,35 @@ class PPOTrainer:
         
         return batch
     
-    def evaluate(self, num_episodes: int) -> Dict[str, float]:
+    def evaluate(self, num_episodes: int, record_video: bool = False, episode_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Evaluate the current policy.
         
         Args:
             num_episodes: Number of evaluation episodes
+            record_video: Whether to record a video of the first episode
+            episode_id: Episode ID for video naming
             
         Returns:
-            Evaluation metrics
+            Evaluation metrics dictionary
         """
         eval_rewards = []
         eval_lengths = []
+        video_path = None
         
-        for _ in range(num_episodes):
+        for ep in range(num_episodes):
             obs, info = self.env.reset()
             episode_reward = 0
             episode_length = 0
             
+            # Record video for first episode if requested
+            if record_video and ep == 0 and hasattr(self.env, 'record_episode_video'):
+                video_path = self.env.record_episode_video(episode_id or 0, self.max_steps_per_episode)
+            
             for step in range(self.max_steps_per_episode):
-                # Select action without exploration (deterministic)
-                action, _, value_info = self.agent.select_action(self.agent.network_params, obs[None, :], jax.random.PRNGKey(0))
+                # Select action deterministically via argmax over policy logits
+                policy_logits, value = self.agent.network.apply(self.agent.network_params, obs[None, :])
+                action = jnp.argmax(policy_logits, axis=-1)
                 
                 obs, reward, terminated, truncated, info = self.env.step(int(action.item()))
                 episode_reward += reward
@@ -213,13 +223,16 @@ class PPOTrainer:
             eval_rewards.append(episode_reward)
             eval_lengths.append(episode_length)
         
-        return {
+        result = {
             'avg_reward': float(np.mean(eval_rewards)),
             'std_reward': float(np.std(eval_rewards)),
             'max_reward': float(np.max(eval_rewards)),
             'min_reward': float(np.min(eval_rewards)),
-            'avg_length': float(np.mean(eval_lengths))
+            'avg_length': float(np.mean(eval_lengths)),
+            'video_path': video_path
         }
+        
+        return result
     
     def check_convergence(self) -> bool:
         """
@@ -259,38 +272,30 @@ class PPOTrainer:
         new_network_params, new_optimizer_state, update_metrics = self.agent.train_step(
             self.agent.network_params, self.agent.optimizer_state, self.env, key
         )
+
+        # Persist updated parameters/optimizer state on the agent
+        self.agent.network_params = new_network_params
+        self.agent.optimizer_state = new_optimizer_state
         
         # Extract episode statistics from update_metrics
         episode_reward = update_metrics.get('episode_reward', 0)
         episode_length = update_metrics.get('episode_length', 0)
         
-        # Handle both JAX arrays and Python scalars
-        if hasattr(episode_reward, 'item'):
-            episode_reward = float(episode_reward.item())
-        if hasattr(episode_length, 'item'):
-            episode_length = int(episode_length.item())
+        # Convert to Python scalars
+        episode_reward = float(episode_reward) if not isinstance(episode_reward, float) else episode_reward
+        episode_length = int(episode_length) if not isinstance(episode_length, int) else episode_length
             
         episode_rewards = [episode_reward]
         episode_lengths = [episode_length]
         
-        # Update episode and step counts
-        self.episode_count += 1
-        self.step_count += episode_length
-        
-        # Store episode metrics
-        self.episode_rewards.extend(episode_rewards)
-        self.episode_lengths.extend(episode_lengths)
-        
-        # Store loss metrics
-        for key, value in update_metrics.items():
-            if 'loss' in key:
-                self.losses[key].append(value)
+        # Note: do not mutate trainer-wide counters or losses here.
+        # These are handled in train() to avoid double counting.
         
         step_metrics = {
             'episode_rewards': episode_rewards,
             'episode_lengths': episode_lengths,
-            'avg_reward': float(np.mean(episode_rewards)),
-            'avg_length': float(np.mean(episode_lengths)),
+            'avg_reward': float(np.mean(np.array(episode_rewards))),
+            'avg_length': float(np.mean(np.array(episode_lengths))),
             'total_steps': episode_lengths[0],
             **update_metrics
         }
@@ -357,10 +362,14 @@ class PPOTrainer:
             self.episode_rewards.extend(step_metrics['episode_rewards'])
             self.episode_lengths.extend(step_metrics['episode_lengths'])
             
-            # Store loss metrics
-            for key, value in step_metrics.items():
-                if 'loss' in key:
-                    self.losses[key].append(value)
+            # Store loss metrics as python floats
+            for key_name, value in step_metrics.items():
+                if isinstance(key_name, str) and ('loss' in key_name or 'entropy' in key_name):
+                    try:
+                        v = float(value.item()) if hasattr(value, 'item') else float(value)
+                        self.losses[key_name].append(v)
+                    except (TypeError, ValueError):
+                        pass
             
             # Logging
             if episode % self.log_frequency == 0:
@@ -381,10 +390,21 @@ class PPOTrainer:
                 if self.mlflow_logger:
                     self.mlflow_logger.log_training_metrics(step_metrics, episode)
                     self.mlflow_logger.log_episode_data(self.episode_rewards, self.episode_lengths, episode)
+                    
+                    # Log incremental analysis every log_frequency
+                    if episode % (self.log_frequency * 2) == 0:
+                        self.mlflow_logger.log_incremental_analysis(
+                            self.episode_rewards,
+                            dict(self.losses),
+                            self.eval_rewards,
+                            episode
+                        )
             
             # Evaluation
             if episode % self.eval_frequency == 0 and episode > 0:
-                eval_metrics = self.evaluate(self.eval_episodes)
+                # Record video for evaluation episodes
+                record_video = (episode % self.video_record_frequency == 0)
+                eval_metrics = self.evaluate(self.eval_episodes, record_video=record_video, episode_id=episode)
                 self.eval_rewards.append(eval_metrics['avg_reward'])
                 
                 print(f"Evaluation | "
@@ -393,7 +413,19 @@ class PPOTrainer:
                 
                 # Log evaluation metrics to MLflow
                 if self.mlflow_logger:
-                    self.mlflow_logger.log_evaluation_metrics(eval_metrics, episode)
+                    self.mlflow_logger.log_evaluation_metrics(
+                        eval_metrics, 
+                        episode, 
+                        video_path=eval_metrics.get('video_path')
+                    )
+                    
+                    # Log incremental analysis
+                    self.mlflow_logger.log_incremental_analysis(
+                        self.episode_rewards,
+                        dict(self.losses),
+                        self.eval_rewards,
+                        episode
+                    )
             
             # Check convergence
             if self.check_convergence():

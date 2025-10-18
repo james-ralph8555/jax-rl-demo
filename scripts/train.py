@@ -74,6 +74,10 @@ def parse_args():
     parser.add_argument("--disable-mlflow", action="store_true",
                         help="Disable MLflow tracking")
     
+    # Video recording parameters
+    parser.add_argument("--video-record-freq", type=int, default=200,
+                        help="Frequency of video recording during evaluation (default: 200)")
+    
     # Random seed
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed (default: 42)")
@@ -94,7 +98,10 @@ def main():
     
     # Create environment
     print("Creating CartPole environment...")
-    env = CartPoleWrapper(max_episode_steps=args.max_steps)
+    env = CartPoleWrapper(
+        max_episode_steps=args.max_steps,
+        video_record_freq=args.video_record_freq if not args.disable_mlflow else None
+    )
     
     # Create agent
     print("Creating PPO agent...")
@@ -128,6 +135,7 @@ def main():
         log_frequency=args.log_frequency,
         enable_mlflow=not args.disable_mlflow,
         mlflow_experiment_name=args.experiment_name,
+        video_record_frequency=args.video_record_freq,
         key=key
     )
     

@@ -53,20 +53,32 @@ graph TB
 The `MLflowLogger` class provides comprehensive experiment tracking with MLflow 3.1.3, supporting:
 
 - **Experiment Management**: Create and manage MLflow experiments
-- **Model Logging**: Log Flax models with proper serialization
-- **Metrics Tracking**: Log training, evaluation, and episode metrics
-- **Hyperparameter Logging**: Track hyperparameter configurations
-- **Artifact Management**: Save plots, models, and analysis results
-- **Model Registry**: Register and version trained models
+- **Model Logging**: Log Flax models with proper serialization using pickle
+- **Metrics Tracking**: Log training, evaluation, and episode metrics with JAX array handling
+- **Hyperparameter Logging**: Track hyperparameter configurations with type conversion
+- **Artifact Management**: Save plots, models, and analysis results using native `mlflow.log_figure`
+- **Model Registry**: Register and version trained models with MLflow 3.1.3 model URI format
+- **Advanced Visualization**: Comprehensive analysis plots including stability, hyperparameter comparison, and policy analysis
 
 #### Key Methods
 
 - `start_run(run_name)`: Initialize a new MLflow run
-- `log_training_metrics(metrics, step)`: Log training metrics with JAX array handling
-- `log_model_checkpoint(model, step, metrics)`: Save model checkpoints with associated metrics
-- `log_policy_distribution(action_probs, observations, step)`: Log policy analysis plots
-- `create_performance_report(training_results)`: Generate detailed performance analysis
-- `search_best_models()`: Find best performing models using MLflow search API
+- `log_training_metrics(metrics, step, model_id, dataset)`: Log training metrics with JAX array handling and optional model/dataset linking
+- `log_model_checkpoint(model, step, metrics, dataset)`: Save model checkpoints with associated metrics and dataset linking
+- `log_policy_distribution(action_probs, observations, step)`: Log policy analysis plots with entropy and confidence tracking
+- `log_episode_data(episode_rewards, episode_lengths, step)`: Log episode-specific metrics with progress visualization
+- `log_episode_progress(episode_rewards, episode_lengths, step)`: Generate comprehensive episode progress plots
+- `log_loss_curves(losses, step)`: Visualize loss evolution with trend analysis
+- `log_evaluation_metrics(eval_metrics, step, model_id, dataset)`: Log evaluation metrics with model linking
+- `log_training_curves(episode_rewards, losses)`: Generate basic training progress visualization
+- `log_advanced_learning_curves(episode_rewards, losses, eval_rewards)`: Create comprehensive learning analysis with multiple window sizes
+- `log_training_stability(episode_rewards, window_size)`: Analyze training stability with rolling statistics
+- `log_hyperparameter_comparison(results, metric)`: Generate hyperparameter comparison heatmaps
+- `log_comprehensive_analysis(training_data)`: Create complete training analysis with multiple visualizations
+- `create_performance_report(training_results)`: Generate detailed performance analysis with statistical benchmarks
+- `create_dashboard_data(training_results)`: Create MLflow dashboard data for experiment tracking
+- `search_best_models(experiment_ids, filter_string, max_results, order_by)`: Find best performing models using MLflow 3.1.3 search API
+- `register_model(model_uri, name, version)`: Register models in MLflow Model Registry with stage transitions
 
 #### MLflowLogger Workflow
 
@@ -121,15 +133,45 @@ logger.log_hyperparameters({
     'epochs': 1000
 })
 
-# Log training metrics
+# Log training metrics with optional model linking
 logger.log_training_metrics({
     'episode_reward': 185.5,
     'policy_loss': 0.234,
     'value_loss': 0.156
-}, step=100)
+}, step=100, model_id="model_100")
 
-# Log model checkpoint
-model_id = logger.log_model_checkpoint(model, step=100, metrics={'accuracy': 0.95})
+# Log episode data with automatic visualization
+logger.log_episode_data(
+    episode_rewards=[180, 185, 190, 195, 198],
+    episode_lengths=[180, 185, 190, 195, 200],
+    step=5
+)
+
+# Log model checkpoint with metrics and dataset linking
+model_id = logger.log_model_checkpoint(
+    model, 
+    step=100, 
+    metrics={'accuracy': 0.95},
+    dataset="training_set_v1"
+)
+
+# Log comprehensive analysis
+logger.log_comprehensive_analysis({
+    'episode_rewards': episode_rewards,
+    'losses': {'policy_loss': policy_losses, 'value_loss': value_losses},
+    'eval_rewards': eval_rewards,
+    'episode_lengths': episode_lengths,
+    'hyperparams': {'learning_rate': 0.001, 'batch_size': 64}
+})
+
+# Create performance report
+report = logger.create_performance_report({
+    'episode_rewards': episode_rewards,
+    'episode_lengths': episode_lengths,
+    'losses': losses,
+    'total_steps': 10000,
+    'training_time': 3600
+})
 
 # End run
 logger.end_run()
@@ -330,10 +372,15 @@ flowchart TD
 
 ### MLflow Integration Features
 
-- **Automatic JAX Array Handling**: Converts JAX arrays to Python scalars for MLflow compatibility
-- **Model Versioning**: Track model evolution with step-based checkpointing
-- **Experiment Comparison**: Compare runs and identify best performing configurations
-- **Dashboard Creation**: Generate MLflow-compatible dashboards for experiment tracking
+- **Automatic JAX Array Handling**: Converts JAX arrays to Python scalars using `_to_float()` and `_flatten_metrics()` functions
+- **Enhanced Model Versioning**: Track model evolution with step-based checkpointing using MLflow 3.1.3 model URI format
+- **Model-Dataset Linking**: Link metrics to specific models and datasets using MLflow tags
+- **Native Figure Logging**: Use `mlflow.log_figure()` for direct matplotlib integration without temporary files
+- **Advanced Search Capabilities**: Search logged models with filtering, ordering, and experiment-specific queries
+- **Model Registry Integration**: Register models with stage transitions (Staging, Production, Archived)
+- **Comprehensive Dashboard Creation**: Generate structured dashboard data for experiment tracking
+- **Robust Error Handling**: Graceful degradation with warning messages for failed operations
+- **Type Conversion**: Automatic conversion of complex data structures for MLflow compatibility
 
 ## Configuration
 
@@ -436,20 +483,27 @@ graph LR
 
 ## Dependencies
 
-- `matplotlib`: Core plotting functionality
-- `seaborn`: Advanced statistical visualizations
-- `numpy`: Numerical computations and array handling
-- `mlflow`: Experiment tracking and model registry
-- `pathlib`: File path handling
-- `tempfile`: Temporary file management for artifacts
+- `matplotlib`: Core plotting functionality for all visualizations
+- `seaborn`: Advanced statistical visualizations (optional, used for hyperparameter heatmaps)
+- `numpy`: Numerical computations and JAX array conversion
+- `mlflow`: Experiment tracking and model registry (version 3.1.3)
+- `pathlib`: File path handling for artifact management
+- `tempfile`: Temporary file management for model serialization
+- `pickle`: Model state serialization for Flax models
+- `collections.abc`: Type checking for mappings and sequences
 
 ## Best Practices
 
-1. **Consistent Logging**: Use the MLflowLogger for all experiment tracking
-2. **Regular Checkpoints**: Log model checkpoints at regular intervals
-3. **Comprehensive Analysis**: Use `create_comprehensive_analysis()` for complete training reports
-4. **Hyperparameter Tracking**: Log all hyperparameters for reproducibility
-5. **Artifact Organization**: Use structured artifact paths for better organization
+1. **Consistent Logging**: Use the MLflowLogger for all experiment tracking with proper metric flattening
+2. **Regular Checkpoints**: Log model checkpoints at regular intervals with associated metrics
+3. **Comprehensive Analysis**: Use `log_comprehensive_analysis()` for complete training reports with multiple visualizations
+4. **Hyperparameter Tracking**: Log all hyperparameters using `log_hyperparameters()` for automatic type conversion
+5. **Artifact Organization**: Use structured artifact paths (e.g., `episode_progress/`, `loss_curves/`, `stability_analysis/`)
+6. **Model-Dataset Linking**: Use `model_id` and `dataset` parameters when logging metrics for traceability
+7. **Progress Visualization**: Leverage automatic episode progress logging every 50 episodes
+8. **Error Handling**: Monitor warning messages for MLflow connectivity issues
+9. **Performance Monitoring**: Use `create_performance_report()` for detailed statistical analysis
+10. **Model Registry**: Register best performing models using `register_model()` with proper staging
 
 ### Recommended Workflow
 

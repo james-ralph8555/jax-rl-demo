@@ -187,12 +187,13 @@ class PPOAgent:
             advantages: Computed advantages
             returns: Computed returns
         """
-        if next_value is None:
-            next_value = 0.0
-            
-        # Compute advantages using GAE
+        # Construct per-timestep next_values by shifting values and appending 0.0
+        # This correctly bootstraps with V(s_{t+1}) and zeros out at episode end.
+        next_values = jnp.concatenate([values[1:], jnp.array([0.0], dtype=values.dtype)])
+
+        # Compute advantages using GAE with per-timestep next_values
         advantages, _ = compute_gae(
-            rewards, values, dones, next_value, self.gamma, self.gae_lambda
+            rewards, values, dones, next_values, self.gamma, self.gae_lambda
         )
         
         # Compute returns

@@ -4,8 +4,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from gymnasium import make
-from gymnasium.wrappers import RecordEpisodeStatistics
-from typing import Tuple, Dict, Any, Optional
+from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+from typing import Tuple, Dict, Any, Optional, List
+import tempfile
+import os
 
 
 class CartPoleWrapper:
@@ -14,7 +16,9 @@ class CartPoleWrapper:
     def __init__(self, 
                  render_mode: Optional[str] = None,
                  max_episode_steps: int = 500,
-                 normalize_observations: bool = True):
+                 normalize_observations: bool = True,
+                 video_record_freq: Optional[int] = None,
+                 video_dir: Optional[str] = None):
         """
         Initialize CartPole environment wrapper.
         
@@ -22,14 +26,44 @@ class CartPoleWrapper:
             render_mode: Rendering mode ('human', 'rgb_array', or None)
             max_episode_steps: Maximum steps per episode
             normalize_observations: Whether to normalize observations
+            video_record_freq: Frequency of video recording (None to disable)
+            video_dir: Directory to save videos (auto-generated if None)
         """
+        self.video_record_freq = video_record_freq
+        self.video_dir = video_dir or tempfile.mkdtemp(prefix="cartpole_videos_")
+        
+        # Set render mode to rgb_array if video recording is requested
+        if video_record_freq is not None and render_mode is None:
+            render_mode = 'rgb_array'
+        
+        # Create base environment
         self.env = make('CartPole-v1', render_mode=render_mode, max_episode_steps=max_episode_steps)
         self.env = RecordEpisodeStatistics(self.env)
+        
+        # Add video recording if requested
+        if self.video_record_freq is not None:
+            def episode_trigger(episode_id):
+                return episode_id % self.video_record_freq == 0
+            
+            self.env = RecordVideo(
+                self.env, 
+                video_folder=self.video_dir,
+                episode_trigger=episode_trigger,
+                name_prefix="cartpole"
+            )
+        
         self.normalize_observations = normalize_observations
         
         # Observation and action space dimensions
-        self.observation_dim = self.env.observation_space.shape[0]
-        self.action_dim = self.env.action_space.n
+        try:
+            self.observation_dim = self.env.observation_space.shape[0]
+        except AttributeError:
+            self.observation_dim = 4
+        
+        try:
+            self.action_dim = self.env.action_space.n
+        except AttributeError:
+            self.action_dim = 2
         
         # Observation statistics for normalization
         self.obs_mean = jnp.zeros(self.observation_dim)
@@ -54,6 +88,8 @@ class CartPoleWrapper:
         obs = jnp.array(obs, dtype=jnp.float32)
         
         if self.normalize_observations:
+            # Update running stats with raw observation, then normalize
+            self._update_running_stats(obs)
             obs = self._normalize_observation(obs)
             
         return obs, info
@@ -72,9 +108,9 @@ class CartPoleWrapper:
         obs = jnp.array(obs, dtype=jnp.float32)
         
         if self.normalize_observations:
-            obs = self._normalize_observation(obs)
-            # Update running statistics
+            # Update running statistics with raw observation, then normalize
             self._update_running_stats(obs)
+            obs = self._normalize_observation(obs)
             
         return obs, float(reward), terminated, truncated, info
     
@@ -133,6 +169,61 @@ class CartPoleWrapper:
     def close(self) -> None:
         """Close the environment."""
         self.env.close()
+    
+    def get_recorded_videos(self) -> List[str]:
+        """
+        Get list of recorded video files.
+        
+        Returns:
+            List of video file paths
+        """
+        videos = []
+        if self.video_record_freq is not None and os.path.exists(self.video_dir):
+            for file in os.listdir(self.video_dir):
+                if file.endswith('.mp4'):
+                    videos.append(os.path.join(self.video_dir, file))
+        return sorted(videos)
+    
+    def record_episode_video(self, episode_id: int, max_steps: int = 500) -> Optional[str]:
+        """
+        Record a single episode video.
+        
+        Args:
+            episode_id: Episode identifier
+            max_steps: Maximum steps to record
+            
+        Returns:
+            Path to recorded video file or None if failed
+        """
+        try:
+            # Create a temporary environment for video recording
+            temp_env = make('CartPole-v1', render_mode='rgb_array', max_episode_steps=max_steps)
+            temp_env = RecordVideo(
+                temp_env,
+                video_folder=self.video_dir,
+                episode_trigger=lambda x: True,  # Record this episode
+                name_prefix=f"eval_episode_{episode_id}"
+            )
+            
+            # Run one episode
+            obs, info = temp_env.reset()
+            for step in range(max_steps):
+                action = temp_env.action_space.sample()  # Random action for demo
+                obs, reward, terminated, truncated, info = temp_env.step(action)
+                if terminated or truncated:
+                    break
+            
+            temp_env.close()
+            
+            # Find the recorded video
+            for file in os.listdir(self.video_dir):
+                if f"eval_episode_{episode_id}" in file and file.endswith('.mp4'):
+                    return os.path.join(self.video_dir, file)
+            
+        except Exception as e:
+            print(f"Warning: Could not record episode video: {e}")
+        
+        return None
     
     @property
     def action_space(self):
