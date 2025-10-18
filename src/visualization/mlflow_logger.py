@@ -22,20 +22,25 @@ class MLflowLogger:
         """
         self.experiment_name = experiment_name
         self.tracking_uri = tracking_uri or os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+        self.backend_store_uri = os.getenv("MLFLOW_BACKEND_STORE_URI", "sqlite:///mlflow.db")
         self.run_id = None
         
-        # Set tracking URI
+        # Set tracking URI and backend store
         mlflow.set_tracking_uri(self.tracking_uri)
         
         # Create or get experiment
         try:
             self.experiment = mlflow.get_experiment_by_name(experiment_name)
             if self.experiment is None:
-                self.experiment_id = mlflow.create_experiment(experiment_name)
+                self.experiment_id = mlflow.create_experiment(
+                    name=experiment_name,
+                    artifact_location="./mlartifacts"
+                )
             else:
                 self.experiment_id = self.experiment.experiment_id
         except Exception as e:
             print(f"Warning: Could not connect to MLflow server at {self.tracking_uri}")
+            print(f"Backend store: {self.backend_store_uri}")
             print(f"Error: {e}")
             self.experiment_id = None
     

@@ -5,12 +5,17 @@
 This project uses Nix flakes for reproducible dependency management. Before running any Python commands or tests, you must enter the development environment:
 
 ```bash
+# Default environment (without MLflow server)
 nix develop
+
+# Environment with MLflow server started automatically
+nix develop .#with-mlflow
 ```
 
 Or run commands directly in the development environment:
 ```bash
 nix develop --command <command>
+nix develop .#with-mlflow --command <command>
 ```
 
 ## Testing Commands
@@ -33,11 +38,27 @@ nix develop --command python <script.py>
 nix develop --command python -c "import jax; print('JAX version:', jax.__version__)"
 ```
 
+## MLflow Server
+
+The MLflow server is not started by default. To use MLflow tracking:
+
+Option 1: Use the environment with MLflow server:
+```bash
+nix develop .#with-mlflow
+```
+
+Option 2: Start the server manually in the default environment:
+```bash
+nix develop
+mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlartifacts --serve-artifacts
+```
+
 ## Environment Variables
 
 The development shell automatically sets:
 - `PYTHONPATH="${builtins.toString ./.}/src:$PYTHONPATH"`
 - `MLFLOW_TRACKING_URI="http://localhost:5000"`
+- `MLFLOW_BACKEND_STORE_URI="sqlite:///mlflow.db"`
 
 ## Project Structure
 

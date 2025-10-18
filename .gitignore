@@ -136,3 +136,6 @@ Thumbs.db
 # Nix
 result/
 result-*
+.mlflow_server.pid
+implementation_plan.md
+mlflow.db
