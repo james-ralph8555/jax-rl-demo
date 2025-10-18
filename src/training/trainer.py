@@ -9,6 +9,7 @@ from collections import defaultdict
 
 from ..agent.ppo import PPOAgent
 from ..environment.cartpole import CartPoleWrapper
+from ..visualization.mlflow_logger import MLflowLogger
 
 
 class PPOTrainer:
@@ -27,6 +28,8 @@ class PPOTrainer:
         eval_episodes: int = 10,
         save_frequency: int = 100,
         log_frequency: int = 10,
+        enable_mlflow: bool = True,
+        mlflow_experiment_name: str = "cartpole-ppo",
         key: Optional[jax.random.PRNGKey] = None
     ):
         """
@@ -44,6 +47,8 @@ class PPOTrainer:
             eval_episodes: Number of episodes for evaluation
             save_frequency: Frequency of model saving
             log_frequency: Frequency of logging
+            enable_mlflow: Whether to enable MLflow logging
+            mlflow_experiment_name: Name of the MLflow experiment
             key: Random key for reproducibility
         """
         self.agent = agent
@@ -57,6 +62,8 @@ class PPOTrainer:
         self.eval_episodes = eval_episodes
         self.save_frequency = save_frequency
         self.log_frequency = log_frequency
+        self.enable_mlflow = enable_mlflow
+        self.mlflow_experiment_name = mlflow_experiment_name
         
         if key is None:
             key = jax.random.PRNGKey(42)
@@ -74,6 +81,12 @@ class PPOTrainer:
         self.episode_lengths = []
         self.losses = defaultdict(list)
         self.eval_rewards = []
+        
+        # MLflow setup
+        self.mlflow_logger = None
+        if self.enable_mlflow:
+            self.mlflow_logger = MLflowLogger(self.mlflow_experiment_name)
+            self.mlflow_logger.setup_autologging()
         
     def collect_episode(self, key: jax.random.PRNGKey) -> Dict[str, jnp.ndarray]:
         """
@@ -317,9 +330,36 @@ class PPOTrainer:
         """
         start_time = time.time()
         
+        # Start MLflow run
+        if self.mlflow_logger:
+            run_name = f"ppo_run_{int(start_time)}"
+            self.mlflow_logger.start_run(run_name)
+            
+            # Log hyperparameters
+            hyperparams = {
+                'max_episodes': self.max_episodes,
+                'max_steps_per_episode': self.max_steps_per_episode,
+                'target_reward': self.target_reward,
+                'convergence_window': self.convergence_window,
+                'early_stopping_patience': self.early_stopping_patience,
+                'eval_frequency': self.eval_frequency,
+                'eval_episodes': self.eval_episodes,
+                'learning_rate': self.agent.learning_rate,
+                'clip_epsilon': self.agent.clip_epsilon,
+                'gamma': self.agent.gamma,
+                'gae_lambda': self.agent.gae_lambda,
+                'entropy_coef': self.agent.entropy_coef,
+                'value_coef': self.agent.value_coef,
+                'batch_size': self.agent.batch_size,
+                'epochs_per_update': self.agent.epochs_per_update,
+            }
+            self.mlflow_logger.log_hyperparameters(hyperparams)
+        
         print(f"Starting training for {self.max_episodes} episodes...")
         print(f"Target reward: {self.target_reward}")
         print(f"Convergence window: {self.convergence_window} episodes")
+        if self.mlflow_logger:
+            print(f"MLflow experiment: {self.mlflow_experiment_name}")
         
         for episode in range(self.max_episodes):
             if self.should_stop:
@@ -357,6 +397,11 @@ class PPOTrainer:
                       f"Policy Loss: {policy_loss:6.4f} | "
                       f"Value Loss: {value_loss:6.4f} | "
                       f"Total Loss: {total_loss:6.4f}")
+                
+                # Log to MLflow
+                if self.mlflow_logger:
+                    self.mlflow_logger.log_training_metrics(step_metrics, episode)
+                    self.mlflow_logger.log_episode_data(self.episode_rewards, self.episode_lengths, episode)
             
             # Evaluation
             if episode % self.eval_frequency == 0 and episode > 0:
@@ -366,6 +411,10 @@ class PPOTrainer:
                 print(f"Evaluation | "
                       f"Avg Reward: {eval_metrics['avg_reward']:6.2f} ± {eval_metrics['std_reward']:6.2f} | "
                       f"Max Reward: {eval_metrics['max_reward']:6.2f}")
+                
+                # Log evaluation metrics to MLflow
+                if self.mlflow_logger:
+                    self.mlflow_logger.log_evaluation_metrics(eval_metrics, episode)
             
             # Check convergence
             if self.check_convergence():
@@ -399,6 +448,34 @@ class PPOTrainer:
             'losses': dict(self.losses)
         }
         
+        # Log final results to MLflow
+        if self.mlflow_logger:
+            # Log final metrics
+            final_metrics = {
+                'final_avg_reward': final_eval['avg_reward'],
+                'final_std_reward': final_eval['std_reward'],
+                'best_avg_reward': self.best_avg_reward,
+                'total_episodes': self.episode_count,
+                'total_steps': self.step_count,
+                'training_time': training_time,
+                'converged': self.best_avg_reward >= self.target_reward,
+            }
+            self.mlflow_logger.log_metrics(final_metrics, step=self.episode_count)
+            
+            # Log training curves and model
+            self.mlflow_logger.log_training_curves(self.episode_rewards, self.losses)
+            self.mlflow_logger.log_model(self.agent.network_params, "final_model")
+            self.mlflow_logger.create_dashboard_data(results)
+            
+            # Register model if it converged
+            if results['converged']:
+                model_uri = f"runs:/{self.mlflow_logger.run_id}/final_model"
+                self.mlflow_logger.register_model(model_uri, "cartpole-ppo-model", "Staging")
+                print("Model registered to MLflow Model Registry")
+            
+            # End MLflow run
+            self.mlflow_logger.end_run()
+        
         print(f"\nTraining completed!")
         print(f"Total episodes: {results['total_episodes']}")
         print(f"Total steps: {results['total_steps']}")
@@ -406,5 +483,7 @@ class PPOTrainer:
         print(f"Final evaluation reward: {results['final_avg_reward']:.2f} ± {results['final_std_reward']:.2f}")
         print(f"Best average reward: {results['best_avg_reward']:.2f}")
         print(f"Converged: {results['converged']}")
+        if self.mlflow_logger:
+            print(f"MLflow run completed: {self.mlflow_logger.run_id}")
         
         return results

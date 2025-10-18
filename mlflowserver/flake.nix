@@ -11,20 +11,18 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         pythonEnv = pkgs.python313.withPackages (ps: with ps; [
-          jax
-          jaxlib
-          flax
-          gymnasium
           numpy
           matplotlib
           pytest
           sqlalchemy
-          mlflow
+          gunicorn
+          uvicorn
         ]);
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             pythonEnv
+            mlflow-server
           ];
           shellHook = ''
             export PYTHONPATH="${builtins.toString ./.}/src:$PYTHONPATH"

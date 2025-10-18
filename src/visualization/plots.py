@@ -3,16 +3,8 @@
 from typing import List, Dict, Any, Optional
 import os
 
-# Import plotting libraries - these will be available when the environment is set up
-try:
-    import matplotlib.pyplot as plt  # type: ignore
-    import numpy as np  # type: ignore
-    PLOTTING_AVAILABLE = True
-except ImportError:
-    PLOTTING_AVAILABLE = False
-    plt = None
-    np = None
-    print("Warning: Matplotlib/NumPy not available. Install with: pip install matplotlib numpy")
+import matplotlib.pyplot as plt  # type: ignore
+import numpy as np  # type: ignore
 
 
 def plot_training_curves(
@@ -30,10 +22,6 @@ def plot_training_curves(
         save_path: Path to save the plot
         show: Whether to display the plot
     """
-    if not PLOTTING_AVAILABLE or plt is None or np is None:
-        print("Plotting not available - skipping plot generation")
-        return
-        
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     fig.suptitle('Training Progress', fontsize=16)
     
@@ -97,10 +85,6 @@ def plot_episode_statistics(
         save_path: Path to save the plot
         show: Whether to display the plot
     """
-    if not PLOTTING_AVAILABLE or plt is None:
-        print("Plotting not available - skipping plot generation")
-        return
-        
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     fig.suptitle('Episode Statistics', fontsize=16)
     
@@ -145,10 +129,6 @@ def plot_hyperparameter_comparison(
         save_path: Path to save the plot
         show: Whether to display the plot
     """
-    if not PLOTTING_AVAILABLE or plt is None or np is None:
-        print("Plotting not available - skipping plot generation")
-        return
-        
     plt.figure(figsize=(10, 6))
     
     for config_name, config_results in results.items():
@@ -191,10 +171,6 @@ def create_training_summary_plot(
         hyperparams: Training hyperparameters
         save_path: Path to save the plot
     """
-    if not PLOTTING_AVAILABLE or plt is None:
-        print("Plotting not available - skipping plot generation")
-        return
-        
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     fig.suptitle('Training Summary', fontsize=16)
     
