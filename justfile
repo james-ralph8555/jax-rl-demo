@@ -7,36 +7,35 @@ default:
 # Start MLflow tracking server
 start-mlflow:
     @echo "Starting MLflow tracking server..."
-    @mkdir -p ./mlartifacts
+    @mkdir -p ./data/mlartifacts
     @uv run --with mlflow mlflow server \
         --host 0.0.0.0 \
         --port 5000 \
-        --backend-store-uri sqlite:///mlflow.db \
-        --default-artifact-root ./mlartifacts \
+        --backend-store-uri sqlite:///./data/mlflow.db \
+        --default-artifact-root ./data/mlartifacts \
         --serve-artifacts
 
 # Start MLflow tracking server in background
 start-mlflow-bg:
     @echo "Starting MLflow tracking server in background..."
-    @mkdir -p ./mlartifacts
+    @mkdir -p ./data/mlartifacts
     @nohup uv run --with mlflow mlflow server \
         --host 0.0.0.0 \
         --port 5000 \
-        --backend-store-uri sqlite:///mlflow.db \
-        --default-artifact-root ./mlartifacts \
-        --serve-artifacts > mlflow.log 2>&1 &
-    @echo $! > .mlflow_server.pid
-    @echo "MLflow server started with PID $(cat .mlflow_server.pid)"
-    @echo "Logs available in mlflow.log"
+        --backend-store-uri sqlite:///./data/mlflow.db \
+        --default-artifact-root ./data/mlartifacts \
+        --serve-artifacts > ./data/mlflow.log 2>&1 &
+    @PID=$!; echo $$PID > ./data/.mlflow_server.pid; echo "MLflow server started with PID $$PID"
+    @echo "Logs available in ./data/mlflow.log"
 
 # Stop MLflow tracking server
 stop-mlflow:
     @echo "Stopping MLflow server..."
-    @if [ -f .mlflow_server.pid ]; then \
-        PID=$(cat .mlflow_server.pid); \
-        kill $PID 2>/dev/null || true; \
+    @if [ -f ./data/.mlflow_server.pid ]; then \
+        PID=$(cat ./data/.mlflow_server.pid); \
+        kill $$PID 2>/dev/null || true; \
         pkill -f "mlflow server.*port 5000" 2>/dev/null || true; \
-        rm -f .mlflow_server.pid; \
+        rm -f ./data/.mlflow_server.pid; \
         echo "✅ MLflow server stopped"; \
     else \
         echo "No MLflow server PID file found"; \
@@ -49,13 +48,13 @@ start-mcp:
 # Show server status
 status:
     @echo "MLflow server status:"
-    @if [ -f .mlflow_server.pid ]; then \
-        PID=$(cat .mlflow_server.pid); \
-        if ps -p $PID > /dev/null 2>&1; then \
-            echo "  ✅ MLflow tracking server running (PID: $PID)"; \
+    @if [ -f ./data/.mlflow_server.pid ]; then \
+        PID=$(cat ./data/.mlflow_server.pid); \
+        if ps -p $$PID > /dev/null 2>&1; then \
+            echo "  ✅ MLflow tracking server running (PID: $$PID)"; \
         else \
             echo "  ❌ MLflow tracking server PID file exists but process not running"; \
-            rm -f .mlflow_server.pid; \
+            rm -f ./data/.mlflow_server.pid; \
         fi; \
     else \
         echo "  ❌ MLflow tracking server not running"; \
@@ -72,5 +71,5 @@ test-file file:
 # Clean up PID files and logs
 clean:
     @echo "Cleaning up PID files and logs..."
-    @rm -f .mlflow_server.pid .mcp_server.pid mlflow.log mcp.log
+    @rm -f ./data/.mlflow_server.pid ./data/.mcp_server.pid ./data/mlflow.log ./data/mcp.log
     @echo "✅ Cleanup complete"

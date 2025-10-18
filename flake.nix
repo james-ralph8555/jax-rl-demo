@@ -31,7 +31,6 @@
           shellHook = ''
             export PYTHONPATH="${builtins.toString ./.}/src:$PYTHONPATH"
             export MLFLOW_TRACKING_URI="http://localhost:5000"
-            export MLFLOW_BACKEND_STORE_URI="sqlite:///mlflow.db"
             
             echo "Development environment ready."
             echo ""

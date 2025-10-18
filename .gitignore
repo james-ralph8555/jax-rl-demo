@@ -137,6 +137,4 @@ Thumbs.db
 result/
 result-*
 .mlflow_server.pid
-implementation_plan.md
 mlflow.db
-AGENTS.md
