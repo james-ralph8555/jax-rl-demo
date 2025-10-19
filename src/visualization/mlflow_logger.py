@@ -903,6 +903,136 @@ class MLflowLogger:
         finally:
             plt.close(fig)
     
+    def log_gradient_flow(self, grad_norms: Dict[str, Any], step: int) -> None:
+        """
+        Log gradient flow visualization to MLflow
+        
+        Args:
+            grad_norms: Dictionary of per-layer gradient norms
+            step: Current training step
+        """
+        try:
+            # Flatten gradient norms for visualization. Support generic mappings
+            # (e.g., Flax FrozenDict) rather than only plain dict.
+            flat_grad_norms: Dict[str, float] = {}
+
+            def flatten_grad_norms(node: Any, prefix: str = "") -> None:
+                if isinstance(node, Mapping):
+                    for k, v in node.items():
+                        flatten_grad_norms(v, f"{prefix}{k}/")
+                    return
+                # Leaf node: convert to Python float if scalar-like
+                try:
+                    flat_grad_norms[prefix[:-1]] = _to_float(node)
+                except Exception:
+                    # Skip non-scalar leaves safely
+                    pass
+
+            flatten_grad_norms(grad_norms)
+            
+            if not flat_grad_norms:
+                return
+            
+            # Create gradient flow plot
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            layers = list(flat_grad_norms.keys())
+            norms = list(flat_grad_norms.values())
+            
+            # Create horizontal bar plot
+            y_pos = np.arange(len(layers))
+            bars = ax.barh(y_pos, norms, alpha=0.7)
+            
+            # Color bars based on magnitude (red = large, green = small)
+            max_norm = max(norms) if norms else 1.0
+            # Use a basic colormap
+            colors = plt.cm.viridis([norm / max_norm for norm in norms])
+            for bar, color in zip(bars, colors):
+                bar.set_color(color)
+            
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(layers)
+            ax.set_xlabel('Gradient Norm')
+            ax.set_title(f'Gradient Flow at Step {step}')
+            ax.grid(True, alpha=0.3)
+            
+            # Add text labels with exact values
+            for i, (layer, norm) in enumerate(zip(layers, norms)):
+                ax.text(norm + max_norm * 0.01, i, f'{norm:.2e}', 
+                       va='center', fontsize=8)
+            
+            plt.tight_layout()
+            
+            # Log to MLflow
+            mlflow.log_figure(fig, f"gradient_flow/step_{step}.png")
+            plt.close()
+            
+            # Also log gradient norms as metrics
+            grad_metrics = {f"grad_norm_{layer.replace('/', '_').replace('.', '_')}": norm 
+                          for layer, norm in flat_grad_norms.items()}
+            self.log_metrics(grad_metrics, step=step)
+            
+        except Exception as error:
+            print(f"Warning: Could not log gradient flow: {error}")
+    
+    def log_kl_divergence(self, kl_values: List[float], step: int) -> None:
+        """
+        Log KL divergence visualization to MLflow
+        
+        Args:
+            kl_values: List of KL divergence values
+            step: Current training step
+        """
+        try:
+            if not kl_values:
+                return
+            
+            fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+            fig.suptitle(f'KL Divergence Analysis - Step {step}', fontsize=16)
+            
+            # Plot KL divergence over time
+            axes[0].plot(kl_values, alpha=0.7, color='blue')
+            axes[0].set_title('KL Divergence Over Updates')
+            axes[0].set_xlabel('Update Step')
+            axes[0].set_ylabel('KL Divergence')
+            axes[0].grid(True, alpha=0.3)
+            
+            # Add threshold lines for common KL targets
+            axes[0].axhline(y=0.01, color='orange', linestyle='--', alpha=0.7, label='Conservative (0.01)')
+            axes[0].axhline(y=0.02, color='red', linestyle='--', alpha=0.7, label='Aggressive (0.02)')
+            axes[0].legend()
+            
+            # Plot histogram of recent KL values
+            recent_kl = kl_values[-100:] if len(kl_values) >= 100 else kl_values
+            axes[1].hist(recent_kl, bins=20, alpha=0.7, edgecolor='black', color='skyblue')
+            axes[1].set_title(f'KL Distribution (Last {len(recent_kl)} values)')
+            axes[1].set_xlabel('KL Divergence')
+            axes[1].set_ylabel('Frequency')
+            axes[1].grid(True, alpha=0.3)
+            
+            # Add statistics text
+            mean_kl = float(np.mean(recent_kl))
+            std_kl = float(np.std(recent_kl))
+            max_kl = float(np.max(recent_kl))
+            
+            stats_text = f'Mean: {mean_kl:.4f}\nStd: {std_kl:.4f}\nMax: {max_kl:.4f}'
+            axes[1].text(0.95, 0.95, stats_text, transform=axes[1].transAxes,
+                        fontsize=10, verticalalignment='top', horizontalalignment='right',
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.5))
+            
+            plt.tight_layout()
+            
+            # Log to MLflow
+            mlflow.log_figure(fig, f"kl_divergence/step_{step}.png")
+            plt.close()
+            
+            # Log KL divergence as metric
+            if kl_values:
+                self.log_metrics({"kl_divergence": kl_values[-1]}, step=step)
+            
+        except Exception as error:
+            print(f"Warning: Could not log KL divergence: {error}")
+    
     def log_hyperparameter_comparison(self, results: Dict[str, Dict[str, Any]], 
                                     metric: str = 'final_reward') -> None:
         """

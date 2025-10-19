@@ -96,6 +96,9 @@ class CartPoleWrapper:
         """
         obs, reward, terminated, truncated, info = self.env.step(action)
         obs = jnp.array(obs, dtype=jnp.float32)
+        # Ensure terminated and truncated remain Python booleans
+        terminated = bool(terminated)
+        truncated = bool(truncated)
         
         if self.normalize_observations:
             # Update running statistics with raw observation, then normalize

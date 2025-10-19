@@ -31,6 +31,7 @@ class PPOTrainer:
         enable_mlflow: bool = True,
         mlflow_experiment_name: str = "cartpole-ppo",
         video_record_frequency: int = 200,  # Record GIF every N episodes
+        log_gradient_flow: bool = False,
         key: Optional[jax.Array] = None
     ):
         """
@@ -50,6 +51,8 @@ class PPOTrainer:
             log_frequency: Frequency of logging
             enable_mlflow: Whether to enable MLflow logging
             mlflow_experiment_name: Name of the MLflow experiment
+            video_record_frequency: Record GIF every N episodes
+            log_gradient_flow: Whether to log gradient flow visualization
             key: Random key for reproducibility
         """
         self.agent = agent
@@ -66,6 +69,7 @@ class PPOTrainer:
         self.enable_mlflow = enable_mlflow
         self.mlflow_experiment_name = mlflow_experiment_name
         self.video_record_frequency = video_record_frequency
+        self.log_gradient_flow = log_gradient_flow
         
         if key is None:
             key = jax.random.PRNGKey(42)
@@ -83,6 +87,8 @@ class PPOTrainer:
         self.episode_lengths = []
         self.losses = defaultdict(list)
         self.eval_rewards = []
+        self.gradient_norms = []
+        self.kl_divergences = []
         
         # MLflow setup
         self.mlflow_logger = None
@@ -280,10 +286,13 @@ class PPOTrainer:
         # Extract episode statistics from update_metrics
         episode_reward = update_metrics.get('episode_reward', 0)
         episode_length = update_metrics.get('episode_length', 0)
+        kl_divergence = update_metrics.get('kl_divergence', 0)
+        grad_norms = update_metrics.get('grad_norms', {})
         
         # Convert to Python scalars
         episode_reward = float(episode_reward) if not isinstance(episode_reward, float) else episode_reward
         episode_length = int(episode_length) if not isinstance(episode_length, int) else episode_length
+        kl_divergence = float(kl_divergence) if not isinstance(kl_divergence, float) else kl_divergence
             
         episode_rewards = [episode_reward]
         episode_lengths = [episode_length]
@@ -297,6 +306,8 @@ class PPOTrainer:
             'avg_reward': float(np.mean(np.array(episode_rewards))),
             'avg_length': float(np.mean(np.array(episode_lengths))),
             'total_steps': episode_lengths[0],
+            'kl_divergence': kl_divergence,
+            'grad_norms': grad_norms,
             **update_metrics
         }
         
@@ -371,6 +382,17 @@ class PPOTrainer:
                     except (TypeError, ValueError):
                         pass
             
+            # Store KL divergence and gradient norms
+            if 'kl_divergence' in step_metrics:
+                try:
+                    kl_val = float(step_metrics['kl_divergence'].item()) if hasattr(step_metrics['kl_divergence'], 'item') else float(step_metrics['kl_divergence'])
+                    self.kl_divergences.append(kl_val)
+                except (TypeError, ValueError):
+                    pass
+            
+            if self.log_gradient_flow and 'grad_norms' in step_metrics:
+                self.gradient_norms.append(step_metrics['grad_norms'])
+            
             # Logging
             if episode % self.log_frequency == 0:
                 avg_reward = step_metrics['avg_reward']
@@ -378,13 +400,15 @@ class PPOTrainer:
                 policy_loss = step_metrics.get('policy_loss', 0)
                 value_loss = step_metrics.get('value_loss', 0)
                 total_loss = step_metrics.get('total_loss', 0)
+                kl_divergence = step_metrics.get('kl_divergence', 0)
                 
                 print(f"Episode {episode:4d} | "
                       f"Avg Reward: {avg_reward:6.2f} | "
                       f"Avg Length: {avg_length:5.1f} | "
                       f"Policy Loss: {policy_loss:6.4f} | "
                       f"Value Loss: {value_loss:6.4f} | "
-                      f"Total Loss: {total_loss:6.4f}")
+                      f"Total Loss: {total_loss:6.4f} | "
+                      f"KL Div: {kl_divergence:6.4f}")
                 
                 # Log to MLflow
                 if self.mlflow_logger:
@@ -399,6 +423,17 @@ class PPOTrainer:
                             self.eval_rewards,
                             episode
                         )
+            
+            # Log gradient flow and KL divergence every 50 episodes (like other visualizations)
+            if episode % 50 == 0 and episode > 0:
+                if self.mlflow_logger:
+                    # Log gradient flow if enabled
+                    if self.log_gradient_flow and self.gradient_norms:
+                        self.mlflow_logger.log_gradient_flow(self.gradient_norms[-1], episode)
+                    
+                    # Log KL divergence if available
+                    if self.kl_divergences:
+                        self.mlflow_logger.log_kl_divergence(self.kl_divergences, episode)
             
             # Evaluation
             if episode % self.eval_frequency == 0 and episode > 0:

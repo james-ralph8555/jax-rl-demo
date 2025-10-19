@@ -202,6 +202,9 @@ def compute_ppo_loss(
     # Compute entropy loss
     entropy_loss = -entropy.mean()
     
+    # Compute KL divergence between old and new policies
+    kl_divergence = jnp.mean(old_log_probs - current_log_probs)
+    
     # Total loss
     total_loss = policy_loss + value_coef * value_loss + entropy_coef * entropy_loss
     
@@ -209,7 +212,8 @@ def compute_ppo_loss(
         'policy_loss': policy_loss,
         'value_loss': value_loss,
         'entropy_loss': entropy_loss,
-        'total_loss': total_loss
+        'total_loss': total_loss,
+        'kl_divergence': kl_divergence
     }
     
     return total_loss, loss_dict

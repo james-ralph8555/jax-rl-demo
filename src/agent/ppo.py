@@ -142,7 +142,7 @@ class PPOAgent:
             
             # Take action in environment
             next_obs, reward, terminated, truncated, info = env.step(action.item())
-            done = terminated or truncated
+            done = bool(terminated) or bool(truncated)
             
             # Store experience
             observations.append(obs_jax)
@@ -247,16 +247,21 @@ class PPOAgent:
             policy_loss = loss_dict['policy_loss']
             value_loss = loss_dict['value_loss']
             entropy_loss = loss_dict['entropy_loss']
+            kl_divergence = loss_dict['kl_divergence']
             
             return total_loss, {
                 "policy_loss": policy_loss,
                 "value_loss": value_loss,
                 "entropy_loss": entropy_loss,
-                "total_loss": total_loss
+                "total_loss": total_loss,
+                "kl_divergence": kl_divergence
             }
         
         # Compute gradients and loss
         (loss, loss_info), grads = jax.value_and_grad(loss_fn, has_aux=True)(network_params)
+        
+        # Compute per-layer gradient norms for visualization
+        grad_norms = jax.tree_util.tree_map(lambda g: jnp.linalg.norm(g), grads)
         
         # Clip gradients
         grad_norm = optax.global_norm(grads)
@@ -267,8 +272,9 @@ class PPOAgent:
         updates, new_optimizer_state = self.optimizer.update(grads, optimizer_state)
         new_network_params = optax.apply_updates(network_params, updates)
         
-        # Add gradient norm to info
+        # Add gradient norms to info
         loss_info["grad_norm"] = grad_norm
+        loss_info["grad_norms"] = grad_norms
         
         return new_network_params, new_optimizer_state, loss_info
     
@@ -318,7 +324,9 @@ class PPOAgent:
             "value_loss": 0.0,
             "entropy_loss": 0.0,
             "total_loss": 0.0,
+            "kl_divergence": 0.0,
             "grad_norm": 0.0,
+            "grad_norms": {},
             "num_updates": 0
         }
         
@@ -343,13 +351,18 @@ class PPOAgent:
                 
                 # Accumulate statistics
                 for key_name in total_stats:
-                    if key_name != "num_updates":
+                    if key_name != "num_updates" and key_name != "grad_norms":
                         total_stats[key_name] += step_stats[key_name]
+                
+                # Handle grad_norms separately (use the last minibatch's grad_norms)
+                if "grad_norms" in step_stats:
+                    total_stats["grad_norms"] = step_stats["grad_norms"]
+                
                 total_stats["num_updates"] += 1
         
-        # Average statistics
+        # Average statistics (except grad_norms which is kept as-is)
         for key_name in total_stats:
-            if key_name != "num_updates":
+            if key_name != "num_updates" and key_name != "grad_norms":
                 total_stats[key_name] /= total_stats["num_updates"]
         
         return network_params, optimizer_state, total_stats

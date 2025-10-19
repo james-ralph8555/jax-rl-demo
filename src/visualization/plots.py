@@ -611,3 +611,122 @@ def create_comprehensive_analysis(
     )
     
     print(f"Comprehensive analysis plots saved to {save_dir}")
+
+
+def plot_gradient_flow(
+    grad_norms: Dict[str, float],
+    step: int,
+    save_path: Optional[str] = None,
+    show: bool = False
+) -> None:
+    """
+    Plot gradient flow visualization showing per-layer gradient norms
+    
+    Args:
+        grad_norms: Dictionary of per-layer gradient norms
+        step: Current training step
+        save_path: Path to save the plot
+        show: Whether to display the plot
+    """
+    if not grad_norms:
+        return
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    layers = list(grad_norms.keys())
+    norms = list(grad_norms.values())
+    
+    # Create horizontal bar plot
+    y_pos = np.arange(len(layers))
+    bars = ax.barh(y_pos, norms, alpha=0.7)
+    
+    # Color bars based on magnitude (red = large, green = small)
+    max_norm = max(norms) if norms else 1.0
+    for bar, norm in zip(bars, norms):
+        intensity = norm / max_norm
+        bar.set_color((intensity, 1 - intensity, 0))  # Red to green gradient
+    
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(layers)
+    ax.set_xlabel('Gradient Norm')
+    ax.set_title(f'Gradient Flow at Step {step}')
+    ax.grid(True, alpha=0.3)
+    
+    # Add text labels with exact values
+    for i, (layer, norm) in enumerate(zip(layers, norms)):
+        ax.text(norm + max_norm * 0.01, i, f'{norm:.2e}', 
+               va='center', fontsize=8)
+    
+    plt.tight_layout()
+    
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+
+def plot_kl_divergence(
+    kl_values: List[float],
+    step: int,
+    save_path: Optional[str] = None,
+    show: bool = False
+) -> None:
+    """
+    Plot KL divergence analysis over time
+    
+    Args:
+        kl_values: List of KL divergence values
+        step: Current training step
+        save_path: Path to save the plot
+        show: Whether to display the plot
+    """
+    if not kl_values:
+        return
+    
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    fig.suptitle(f'KL Divergence Analysis - Step {step}', fontsize=16)
+    
+    # Plot KL divergence over time
+    axes[0].plot(kl_values, alpha=0.7, color='blue')
+    axes[0].set_title('KL Divergence Over Updates')
+    axes[0].set_xlabel('Update Step')
+    axes[0].set_ylabel('KL Divergence')
+    axes[0].grid(True, alpha=0.3)
+    
+    # Add threshold lines for common KL targets
+    axes[0].axhline(y=0.01, color='orange', linestyle='--', alpha=0.7, label='Conservative (0.01)')
+    axes[0].axhline(y=0.02, color='red', linestyle='--', alpha=0.7, label='Aggressive (0.02)')
+    axes[0].legend()
+    
+    # Plot histogram of recent KL values
+    recent_kl = kl_values[-100:] if len(kl_values) >= 100 else kl_values
+    axes[1].hist(recent_kl, bins=20, alpha=0.7, edgecolor='black', color='skyblue')
+    axes[1].set_title(f'KL Distribution (Last {len(recent_kl)} values)')
+    axes[1].set_xlabel('KL Divergence')
+    axes[1].set_ylabel('Frequency')
+    axes[1].grid(True, alpha=0.3)
+    
+    # Add statistics text
+    mean_kl = float(np.mean(recent_kl))
+    std_kl = float(np.std(recent_kl))
+    max_kl = float(np.max(recent_kl))
+    
+    stats_text = f'Mean: {mean_kl:.4f}\nStd: {std_kl:.4f}\nMax: {max_kl:.4f}'
+    axes[1].text(0.95, 0.95, stats_text, transform=axes[1].transAxes,
+                fontsize=10, verticalalignment='top', horizontalalignment='right',
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.5))
+    
+    plt.tight_layout()
+    
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    if show:
+        plt.show()
+    else:
+        plt.close()
