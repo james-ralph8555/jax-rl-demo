@@ -933,44 +933,104 @@ class MLflowLogger:
             if not flat_grad_norms:
                 return
             
-            # Create gradient flow plot
-            fig, ax = plt.subplots(figsize=(10, 6))
-            
-            layers = list(flat_grad_norms.keys())
-            norms = list(flat_grad_norms.values())
-            
-            # Create horizontal bar plot
-            y_pos = np.arange(len(layers))
-            bars = ax.barh(y_pos, norms, alpha=0.7)
-            
-            # Color bars based on magnitude (red = large, green = small)
-            max_norm = max(norms) if norms else 1.0
-            # Use a basic colormap
-            colors = plt.cm.viridis([norm / max_norm for norm in norms])
-            for bar, color in zip(bars, colors):
-                bar.set_color(color)
-            
-            ax.set_yticks(y_pos)
-            ax.set_yticklabels(layers)
-            ax.set_xlabel('Gradient Norm')
-            ax.set_title(f'Gradient Flow at Step {step}')
-            ax.grid(True, alpha=0.3)
-            
-            # Add text labels with exact values
-            for i, (layer, norm) in enumerate(zip(layers, norms)):
-                ax.text(norm + max_norm * 0.01, i, f'{norm:.2e}', 
-                       va='center', fontsize=8)
-            
+            # Build violin plot with actor/critic separation on log scale
+            import seaborn as sns  # type: ignore
+
+            xs: list[str] = []
+            ys: list[float] = []
+            hues: list[str] = []
+
+            def _parse_entry(name: str) -> tuple[str, str]:
+                parts = name.split('/')
+                if parts and parts[0] == 'params':
+                    parts = parts[1:]
+                network = 'shared'
+                layer = '/'.join(parts)
+                if 'actor' in parts:
+                    network = 'actor'
+                    try:
+                        idx = parts.index('actor')
+                        if len(parts) > idx + 1:
+                            layer = parts[idx + 1]
+                    except ValueError:
+                        pass
+                elif 'critic' in parts:
+                    network = 'critic'
+                    try:
+                        idx = parts.index('critic')
+                        if len(parts) > idx + 1:
+                            layer = parts[idx + 1]
+                    except ValueError:
+                        pass
+                else:
+                    if len(parts) >= 2:
+                        layer = parts[-2]
+                return layer, network
+
+            for name, val in flat_grad_norms.items():
+                try:
+                    norm = float(np.asarray(val).reshape(()))
+                except Exception:
+                    continue
+                layer, network = _parse_entry(name)
+                xs.append(layer)
+                ys.append(max(norm, 1e-12))
+                hues.append(network)
+
+            if not ys:
+                return
+
+            fig, ax = plt.subplots(figsize=(11, 6))
+            unique_hues = sorted(set(hues))
+            split = len(unique_hues) == 2
+
+            try:
+                sns.violinplot(
+                    x=xs,
+                    y=ys,
+                    hue=hues,
+                    split=split,
+                    inner='quartile',
+                    scale='width',
+                    cut=0,
+                    ax=ax,
+                    palette='Set2',
+                )
+            except Exception:
+                sns.violinplot(
+                    x=xs,
+                    y=ys,
+                    hue=hues if len(unique_hues) > 0 else None,
+                    inner='quartile',
+                    scale='width',
+                    cut=0,
+                    ax=ax,
+                    palette='Set2',
+                )
+
+            ax.set_yscale('log')
+            ax.set_xlabel('Layer')
+            ax.set_ylabel('Gradient Norm (log scale)')
+            ax.set_title(f'Gradient Flow (Violin) at Step {step}')
+            ax.grid(True, which='both', axis='y', alpha=0.2)
+
+            median_val = float(np.median(ys))
+            ax.axhline(median_val, color='gray', linestyle='--', linewidth=1, label='median')
+
+            handles, labels = ax.get_legend_handles_labels()
+            if handles and labels and labels[0] == 'hue':
+                labels = labels[1:]
+                handles = handles[1:]
+            if labels:
+                ax.legend(handles=handles, labels=labels, title='Network', loc='best', frameon=True)
+            else:
+                ax.legend(loc='best', frameon=True)
+
             plt.tight_layout()
-            
+
             # Log to MLflow
             mlflow.log_figure(fig, f"gradient_flow/step_{step}.png")
             plt.close()
-            
-            # Also log gradient norms as metrics
-            grad_metrics = {f"grad_norm_{layer.replace('/', '_').replace('.', '_')}": norm 
-                          for layer, norm in flat_grad_norms.items()}
-            self.log_metrics(grad_metrics, step=step)
             
         except Exception as error:
             print(f"Warning: Could not log gradient flow: {error}")

@@ -401,6 +401,7 @@ class PPOTrainer:
                 value_loss = step_metrics.get('value_loss', 0)
                 total_loss = step_metrics.get('total_loss', 0)
                 kl_divergence = step_metrics.get('kl_divergence', 0)
+                clipfrac = step_metrics.get('clipfrac', 0)
                 
                 print(f"Episode {episode:4d} | "
                       f"Avg Reward: {avg_reward:6.2f} | "
@@ -408,7 +409,8 @@ class PPOTrainer:
                       f"Policy Loss: {policy_loss:6.4f} | "
                       f"Value Loss: {value_loss:6.4f} | "
                       f"Total Loss: {total_loss:6.4f} | "
-                      f"KL Div: {kl_divergence:6.4f}")
+                      f"KL Div: {kl_divergence:6.4f} | "
+                      f"ClipFrac: {clipfrac:6.4f}")
                 
                 # Log to MLflow
                 if self.mlflow_logger:

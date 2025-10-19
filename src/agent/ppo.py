@@ -248,13 +248,21 @@ class PPOAgent:
             value_loss = loss_dict['value_loss']
             entropy_loss = loss_dict['entropy_loss']
             kl_divergence = loss_dict['kl_divergence']
+
+            # Compute clip fraction: fraction of samples where |ratio - 1| > clip_epsilon
+            # ratio = exp(log_pi_new - log_pi_old)
+            from .network import evaluate_action
+            current_log_probs = jax.vmap(evaluate_action)(policy_logits, actions)
+            ratio = jnp.exp(current_log_probs - old_log_probs)
+            clipfrac = jnp.mean((jnp.abs(ratio - 1.0) > self.clip_epsilon).astype(jnp.float32))
             
             return total_loss, {
                 "policy_loss": policy_loss,
                 "value_loss": value_loss,
                 "entropy_loss": entropy_loss,
                 "total_loss": total_loss,
-                "kl_divergence": kl_divergence
+                "kl_divergence": kl_divergence,
+                "clipfrac": clipfrac
             }
         
         # Compute gradients and loss
@@ -325,6 +333,7 @@ class PPOAgent:
             "entropy_loss": 0.0,
             "total_loss": 0.0,
             "kl_divergence": 0.0,
+            "clipfrac": 0.0,
             "grad_norm": 0.0,
             "grad_norms": {},
             "num_updates": 0

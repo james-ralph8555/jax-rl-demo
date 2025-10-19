@@ -620,49 +620,124 @@ def plot_gradient_flow(
     show: bool = False
 ) -> None:
     """
-    Plot gradient flow visualization showing per-layer gradient norms
-    
+    Plot gradient flow using a log-scale violin plot grouped by layer with
+    actor/critic separation for clarity.
+
     Args:
-        grad_norms: Dictionary of per-layer gradient norms
-        step: Current training step
-        save_path: Path to save the plot
-        show: Whether to display the plot
+        grad_norms: Dictionary of per-parameter gradient norms. Keys are path-like
+            names (e.g., 'params/actor/Dense_0/kernel').
+        step: Current training step (for title annotation).
+        save_path: Optional path to save the figure.
+        show: Whether to display the plot.
     """
     if not grad_norms:
         return
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    layers = list(grad_norms.keys())
-    norms = list(grad_norms.values())
-    
-    # Create horizontal bar plot
-    y_pos = np.arange(len(layers))
-    bars = ax.barh(y_pos, norms, alpha=0.7)
-    
-    # Color bars based on magnitude (red = large, green = small)
-    max_norm = max(norms) if norms else 1.0
-    for bar, norm in zip(bars, norms):
-        intensity = norm / max_norm
-        bar.set_color((intensity, 1 - intensity, 0))  # Red to green gradient
-    
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(layers)
-    ax.set_xlabel('Gradient Norm')
-    ax.set_title(f'Gradient Flow at Step {step}')
-    ax.grid(True, alpha=0.3)
-    
-    # Add text labels with exact values
-    for i, (layer, norm) in enumerate(zip(layers, norms)):
-        ax.text(norm + max_norm * 0.01, i, f'{norm:.2e}', 
-               va='center', fontsize=8)
-    
+
+    # Build records for seaborn: x=layer, y=norm, hue=network(actor/critic)
+    xs: list[str] = []
+    ys: list[float] = []
+    hues: list[str] = []
+
+    def _parse_entry(name: str) -> tuple[str, str]:
+        # name like 'params/actor/Dense_0/kernel' or 'actor/Dense_0/bias'
+        parts = name.split('/')
+        # Drop optional leading 'params'
+        if parts and parts[0] == 'params':
+            parts = parts[1:]
+        # Determine network and layer
+        network = 'shared'
+        layer = '/'.join(parts)
+        if 'actor' in parts:
+            network = 'actor'
+            try:
+                idx = parts.index('actor')
+                # Layer typically the next token (e.g., Dense_0); fall back gracefully
+                if len(parts) > idx + 1:
+                    layer = parts[idx + 1]
+            except ValueError:
+                pass
+        elif 'critic' in parts:
+            network = 'critic'
+            try:
+                idx = parts.index('critic')
+                if len(parts) > idx + 1:
+                    layer = parts[idx + 1]
+            except ValueError:
+                pass
+        else:
+            # If neither actor nor critic explicitly present, try to take penultimate as layer
+            if len(parts) >= 2:
+                layer = parts[-2]
+        return layer, network
+
+    for name, value in grad_norms.items():
+        try:
+            norm = float(np.asarray(value).reshape(()))
+        except Exception:
+            continue
+        layer, network = _parse_entry(name)
+        xs.append(layer)
+        ys.append(max(norm, 1e-12))  # avoid non-positive for log-scale
+        hues.append(network)
+
+    if not ys:
+        return
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+    unique_hues = sorted(set(hues))
+    split = len(unique_hues) == 2  # split violins only if exactly two groups
+
+    try:
+        sns.violinplot(
+            x=xs,
+            y=ys,
+            hue=hues,
+            split=split,
+            inner='quartile',
+            scale='width',
+            cut=0,
+            ax=ax,
+            palette='Set2',
+        )
+    except Exception:
+        # Fallback without split if seaborn version/hue levels disagree
+        sns.violinplot(
+            x=xs,
+            y=ys,
+            hue=hues if len(unique_hues) > 0 else None,
+            inner='quartile',
+            scale='width',
+            cut=0,
+            ax=ax,
+            palette='Set2',
+        )
+
+    ax.set_yscale('log')
+    ax.set_xlabel('Layer')
+    ax.set_ylabel('Gradient Norm (log scale)')
+    ax.set_title(f'Gradient Flow (Violin) at Step {step}')
+    ax.grid(True, which='both', axis='y', alpha=0.2)
+
+    # Reference baseline: global median
+    median_val = float(np.median(ys))
+    ax.axhline(median_val, color='gray', linestyle='--', linewidth=1, label='median')
+    # Ensure legend shows median and hue categories cleanly
+    handles, labels = ax.get_legend_handles_labels()
+    if handles and labels and labels[0] == 'hue':
+        # Some seaborn versions add a label header; clean it up
+        labels = labels[1:]
+        handles = handles[1:]
+    if labels:
+        ax.legend(handles=handles, labels=labels, title='Network', loc='best', frameon=True)
+    else:
+        ax.legend(loc='best', frameon=True)
+
     plt.tight_layout()
-    
+
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    
+
     if show:
         plt.show()
     else:
