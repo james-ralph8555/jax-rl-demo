@@ -78,9 +78,7 @@ def parse_args():
     parser.add_argument("--video-record-freq", type=int, default=200,
                         help="Frequency of GIF recording during evaluation (default: 200)")
     
-    # Gradient flow parameters
-    parser.add_argument("--log-gradient-flow", action="store_true",
-                        help="Enable gradient flow visualization logging")
+
     
     # Random seed
     parser.add_argument("--seed", type=int, default=42,
@@ -149,7 +147,7 @@ def main():
         enable_mlflow=not args.disable_mlflow,
         mlflow_experiment_name=args.experiment_name,
         video_record_frequency=args.video_record_freq,
-        log_gradient_flow=args.log_gradient_flow,
+        log_gradient_flow=True,
         key=key
     )
     
